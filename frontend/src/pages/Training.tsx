@@ -277,30 +277,32 @@ export default function Training() {
               </label>
             </div>
             {config.optimize && (
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] sm:text-xs text-dark-text/70">
-                <span>
-                  Batch: <strong className="text-dark-heading">{hardware.device_type === 'gpu' ? Math.min(config.batch_size * 2, 64) : Math.max(Math.floor(config.batch_size / 2), 4)}</strong>
-                </span>
-                <span>
-                  Workers: <strong className="text-dark-heading">{hardware.device_type === 'gpu' ? Math.min(config.workers, 16) : Math.min(config.workers, 4)}</strong>
-                </span>
-                <span className={hardware.device_type === 'gpu' ? 'text-emerald-400' : 'text-amber-400'}>
-                  {hardware.device_type === 'gpu' ? '~8-10x faster than CPU' : 'CPU mode — conservative settings'}
-                </span>
-              </div>
-              {hardware.device_type === 'gpu' && (
-                <div className="mt-2 space-y-1">
-                  <div className="flex items-center justify-between text-[10px] text-dark-text/60">
-                    <span>Est. VRAM: ~{Math.round(config.batch_size * (config.image_size ** 2) / 40000) + 100}MB</span>
-                    <span>50% target: ~{(hardware.gpu_vram_mb || 15000) * 0.5 / 1024 > 1 ? `${((hardware.gpu_vram_mb || 15000) * 0.5 / 1024).toFixed(1)}GB` : `${Math.round((hardware.gpu_vram_mb || 15000) * 0.5)}MB`}</span>
-                  </div>
-                  <div className="w-full h-1.5 rounded-full bg-dark-border overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-primary transition-all"
-                      style={{ width: `${Math.min(((config.batch_size * (config.image_size ** 2) / 40000) + 100) / ((hardware.gpu_vram_mb || 15000)) * 100, 50)}%` }}
-                    />
-                  </div>
+              <>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] sm:text-xs text-dark-text/70">
+                  <span>
+                    Batch: <strong className="text-dark-heading">{hardware.device_type === 'gpu' ? Math.min(config.batch_size * 2, 64) : Math.max(Math.floor(config.batch_size / 2), 4)}</strong>
+                  </span>
+                  <span>
+                    Workers: <strong className="text-dark-heading">{hardware.device_type === 'gpu' ? Math.min(config.workers, 16) : Math.min(config.workers, 4)}</strong>
+                  </span>
+                  <span className={hardware.device_type === 'gpu' ? 'text-emerald-400' : 'text-amber-400'}>
+                    {hardware.device_type === 'gpu' ? '~8-10x faster than CPU' : 'CPU mode — conservative settings'}
+                  </span>
                 </div>
-              )}
+                {hardware.device_type === 'gpu' && (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] text-dark-text/60">
+                      <span>Est. VRAM: ~{Math.round(config.batch_size * (config.image_size ** 2) / 40000) + 100}MB</span>
+                      <span>50% target: ~{(hardware.gpu_vram_mb || 15000) * 0.5 / 1024 > 1 ? `${((hardware.gpu_vram_mb || 15000) * 0.5 / 1024).toFixed(1)}GB` : `${Math.round((hardware.gpu_vram_mb || 15000) * 0.5)}MB`}</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-dark-border overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-primary transition-all"
+                        style={{ width: `${Math.min(((config.batch_size * (config.image_size ** 2) / 40000) + 100) / ((hardware.gpu_vram_mb || 15000)) * 100, 50)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
