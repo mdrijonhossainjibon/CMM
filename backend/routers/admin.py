@@ -103,7 +103,7 @@ def _get_gpu_stats_torch():
                 "name": torch.cuda.get_device_name(0),
                 "memory_used": torch.cuda.memory_allocated(0) // (1024 * 1024),
                 "memory_total": max(
-                    torch.cuda.get_device_properties(0).total_mem // (1024 * 1024), 1
+                    torch.cuda.get_device_properties(0).total_memory // (1024 * 1024), 1
                 ),
                 "utilization": 0,
                 "temperature": 0,

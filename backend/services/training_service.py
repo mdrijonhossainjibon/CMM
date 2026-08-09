@@ -25,7 +25,7 @@ def detect_hardware():
         if torch.cuda.is_available():
             info["device_type"] = "gpu"
             info["gpu_name"] = torch.cuda.get_device_name(0)
-            info["gpu_vram_mb"] = torch.cuda.get_device_properties(0).total_mem // (1024 * 1024)
+            info["gpu_vram_mb"] = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
     except ImportError:
         pass
     return info
