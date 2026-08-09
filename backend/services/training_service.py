@@ -32,11 +32,11 @@ def detect_hardware():
 
 
 def optimize_training_config(batch_size: int, image_size: int, workers: int, hardware: dict) -> tuple:
-    """Auto-tune training parameters targeting ~50% GPU VRAM for max speed."""
+    """Auto-tune training parameters targeting ~30% GPU VRAM for balanced speed."""
     if hardware["device_type"] == "gpu":
         gpu_vram = hardware.get("gpu_vram_mb", 0)
         if gpu_vram > 0:
-            target_vram = int(gpu_vram * 0.50)
+            target_vram = int(gpu_vram * 0.30)
             per_img = estimate_vram_mb(1, image_size)
             model_base = 100
             available_per_batch = max(target_vram - model_base, per_img)
