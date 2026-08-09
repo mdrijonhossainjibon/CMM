@@ -1,12 +1,15 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import GlassPanel from '../components/common/GlassPanel';
 import { Icon } from '../components/common/Icons';
 import { useAppDispatch, useAppSelector } from '../app/store';
 import { toggleTheme } from '../store/slices/themeSlice';
 import { setServerUrl } from '../store/slices/serverSlice';
+import { updateBaseURL } from '../services/apiClient';
 
 export default function Settings() {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const { theme } = useAppSelector((state) => state.theme);
   const { serverUrl } = useAppSelector((state) => state.server);
   const [editUrl, setEditUrl] = useState(serverUrl);
@@ -14,9 +17,11 @@ export default function Settings() {
 
   const handleSave = () => {
     const trimmed = editUrl.trim().replace(/\/+$/, '');
+    if (!trimmed) return;
     dispatch(setServerUrl(trimmed));
+    updateBaseURL(trimmed);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => { setSaved(false); navigate(0); }, 1000);
   };
 
   return (

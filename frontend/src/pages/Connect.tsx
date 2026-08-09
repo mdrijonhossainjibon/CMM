@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAppDispatch } from '../app/store';
 import { setServerUrl } from '../store/slices/serverSlice';
+import { updateBaseURL } from '../services/apiClient';
 
 export default function Connect() {
   const dispatch = useAppDispatch();
@@ -38,6 +39,7 @@ export default function Connect() {
 
     if (ok) {
       dispatch(setServerUrl(trimmed));
+      updateBaseURL(trimmed);
     } else {
       setConnError('Cannot reach the backend. Check the URL and try again.');
     }
