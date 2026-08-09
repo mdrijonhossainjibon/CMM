@@ -1,0 +1,17 @@
+venv/
+backend/
+dataset/
+training_data/
+exports/
+logs/
+runs/
+uploads/
+training_queue/
+__pycache__/
+*.py
+*.pyc
+*.pt
+Dockerfile
+requirements.txt
+run_dev.py
+node_modules/
