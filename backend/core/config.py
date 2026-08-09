@@ -15,16 +15,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
 
-    # CORS
-    CORS_ORIGINS: List[str] = [
-        "http://localhost:5173",
-        "http://localhost:8000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8000",
-        "https://*.vercel.app",
-    ]
-    CORS_ALLOW_ALL: bool = False
-
+    # CORS — allowed via regex in main.py (any https?:// origin)
+    
     # Model
     MODEL_PATH: str = "backend/model/best.pt"
 

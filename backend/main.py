@@ -12,23 +12,14 @@ app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
 # Rate limiting middleware
 app.add_middleware(RateLimitMiddleware)
 
-# CORS
-if settings.CORS_ALLOW_ALL:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=r"https?://.*",
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# CORS — allow all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"https?://.*",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include API routers
 app.include_router(auth.router)
