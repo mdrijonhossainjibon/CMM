@@ -15,8 +15,16 @@ export async function getTrainingStatus(): Promise<TrainingStatusResponse> {
   return res.data;
 }
 
-export async function getHardwareInfo(): Promise<{ success: boolean; hardware: { device_type: string; gpu_name?: string } }> {
+export async function getHardwareInfo(): Promise<{ success: boolean; hardware: { device_type: string; gpu_name?: string; gpu_vram_mb?: number } }> {
   const res = await client.get('/train/hardware', { timeout: 5000 });
+  return res.data;
+}
+
+export async function getOptimizePreview(batchSize: number, imageSize: number, workers: number, optimize: boolean) {
+  const res = await client.get('/train/optimize-preview', {
+    params: { batch_size: batchSize, image_size: imageSize, workers, optimize },
+    timeout: 5000,
+  });
   return res.data;
 }
 

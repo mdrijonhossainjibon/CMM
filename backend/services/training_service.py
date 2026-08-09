@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import subprocess
 import sys
 import time as time_module
@@ -9,22 +10,40 @@ from backend.core.config import settings
 GPU_STATUS_FILE = "runs/gpu_status.json"
 
 
+def estimate_vram_mb(batch_size: int, image_size: int) -> int:
+    """Estimate VRAM usage in MB for YOLOv8 training."""
+    per_image_mb = (image_size ** 2) / 40000
+    model_base_mb = 100
+    total = int(batch_size * per_image_mb + model_base_mb)
+    return max(total, 1)
+
+
 def detect_hardware():
-    info = {"device_type": "cpu", "gpu_name": None}
+    info = {"device_type": "cpu", "gpu_name": None, "gpu_vram_mb": 0}
     try:
         import torch
         if torch.cuda.is_available():
             info["device_type"] = "gpu"
             info["gpu_name"] = torch.cuda.get_device_name(0)
+            info["gpu_vram_mb"] = torch.cuda.get_device_properties(0).total_mem // (1024 * 1024)
     except ImportError:
         pass
     return info
 
 
 def optimize_training_config(batch_size: int, image_size: int, workers: int, hardware: dict) -> tuple:
-    """Auto-tune training parameters based on available hardware."""
+    """Auto-tune training parameters targeting ~50% GPU VRAM for max speed."""
     if hardware["device_type"] == "gpu":
-        optimized_bs = min(batch_size * 2, 64)
+        gpu_vram = hardware.get("gpu_vram_mb", 0)
+        if gpu_vram > 0:
+            target_vram = int(gpu_vram * 0.50)
+            per_img = estimate_vram_mb(1, image_size)
+            model_base = 100
+            available_per_batch = max(target_vram - model_base, per_img)
+            optimal_bs = min(available_per_batch // per_img, 128)
+            optimized_bs = max(optimal_bs, batch_size)
+        else:
+            optimized_bs = min(batch_size * 2, 64)
         optimized_workers = min(workers, 16)
     else:
         optimized_bs = max(batch_size // 2, 4)
@@ -37,9 +56,10 @@ class TrainingService:
         self._process: Optional[subprocess.Popen] = None
         self._current_type: str = "auto"
         self._started_at: Optional[float] = None
-        self._hardware: dict = {"device_type": "cpu", "gpu_name": None}
+        self._hardware: dict = {"device_type": "cpu", "gpu_name": None, "gpu_vram_mb": 0}
         self._batch_size: Optional[int] = None
         self._workers: Optional[int] = None
+        self._vram_estimate_mb: int = 0
 
     def start_training(
         self,
@@ -60,6 +80,7 @@ class TrainingService:
 
         self._batch_size = batch_size
         self._workers = workers
+        self._vram_estimate_mb = estimate_vram_mb(batch_size, image_size)
 
         script_path = settings.TRAINING_SCRIPT_PATH
         env = os.environ.copy()
@@ -94,8 +115,10 @@ class TrainingService:
                 "training_type": self._current_type,
                 "device_type": self._hardware.get("device_type"),
                 "gpu_name": self._hardware.get("gpu_name"),
+                "gpu_vram_mb": self._hardware.get("gpu_vram_mb", 0),
                 "batch_size": self._batch_size,
                 "workers": self._workers,
+                "vram_estimate_mb": self._vram_estimate_mb,
             }
 
         progress = 0
@@ -115,8 +138,10 @@ class TrainingService:
             "training_type": self._current_type,
             "device_type": self._hardware.get("device_type"),
             "gpu_name": self._hardware.get("gpu_name"),
+            "gpu_vram_mb": self._hardware.get("gpu_vram_mb", 0),
             "batch_size": self._batch_size,
             "workers": self._workers,
+            "vram_estimate_mb": self._vram_estimate_mb,
         }
 
         gpu_status = {"gpu_util": 0, "gpu_mem_used": 0, "gpu_mem_total": 0, "gpu_temperature": 0}
@@ -142,3 +167,25 @@ class TrainingService:
 
     def get_hardware_info(self) -> dict:
         return self._hardware
+
+    def preview_optimize(self, batch_size: int, image_size: int, workers: int, optimize: bool) -> dict:
+        hw = detect_hardware()
+        if optimize:
+            opt_bs, opt_imgsz, opt_w = optimize_training_config(batch_size, image_size, workers, hw)
+        else:
+            opt_bs, opt_imgsz, opt_w = batch_size, image_size, workers
+
+        vram_est = estimate_vram_mb(opt_bs, opt_imgsz)
+        gpu_vram = hw.get("gpu_vram_mb", 0)
+        vram_pct = round((vram_est / gpu_vram) * 100) if gpu_vram > 0 else 0
+
+        return {
+            "device_type": hw["device_type"],
+            "gpu_name": hw["gpu_name"],
+            "gpu_vram_mb": gpu_vram,
+            "optimized_batch_size": opt_bs,
+            "optimized_workers": opt_w,
+            "vram_estimate_mb": vram_est,
+            "vram_percent": vram_pct,
+            "speed_factor": round(opt_bs / max(batch_size, 1), 1),
+        }

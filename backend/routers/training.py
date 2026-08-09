@@ -240,6 +240,19 @@ async def get_hardware_info():
     return {"success": True, "hardware": _training_service.get_hardware_info()}
 
 
+@router.get("/train/optimize-preview")
+async def get_optimize_preview(
+    batch_size: int = 16,
+    image_size: int = 640,
+    workers: int = 8,
+    optimize: bool = True,
+):
+    return {
+        "success": True,
+        "preview": _training_service.preview_optimize(batch_size, image_size, workers, optimize),
+    }
+
+
 @router.get("/training-types")
 async def get_training_types():
     return {"success": True, "training_types": settings.TRAINING_TYPES}

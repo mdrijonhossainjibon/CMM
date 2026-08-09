@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import GlassPanel from '../components/common/GlassPanel';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Icon } from '../components/common/Icons';
-import { startTraining, getTrainingStatus, getTrainingTypes, getHardwareInfo } from '../services/trainingService';
+import { startTraining, getTrainingStatus, getTrainingTypes, getHardwareInfo, getOptimizePreview } from '../services/trainingService';
 import { getTrainingClasses } from '../services/trainingDataService';
 import { useWebSocket } from '../hooks';
 import type { TrainingStatusResponse, TrainingType, TrainingClass } from '../types';
@@ -26,7 +26,7 @@ export default function Training() {
   const [trainingTypes, setTrainingTypes] = useState<Record<string, TrainingType>>({});
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
-  const [hardware, setHardware] = useState<{ device_type: string; gpu_name?: string } | null>(null);
+  const [hardware, setHardware] = useState<{ device_type: string; gpu_name?: string; gpu_vram_mb?: number } | null>(null);
   const [trainingClasses, setTrainingClasses] = useState<TrainingClass[]>([]);
   const [totalTrainImages, setTotalTrainImages] = useState(0);
 
@@ -288,9 +288,23 @@ export default function Training() {
                   {hardware.device_type === 'gpu' ? '~8-10x faster than CPU' : 'CPU mode — conservative settings'}
                 </span>
               </div>
-            )}
-          </div>
-        )}
+              {hardware.device_type === 'gpu' && (
+                <div className="mt-2 space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-dark-text/60">
+                    <span>Est. VRAM: ~{Math.round(config.batch_size * (config.image_size ** 2) / 40000) + 100}MB</span>
+                    <span>50% target: ~{(hardware.gpu_vram_mb || 15000) * 0.5 / 1024 > 1 ? `${((hardware.gpu_vram_mb || 15000) * 0.5 / 1024).toFixed(1)}GB` : `${Math.round((hardware.gpu_vram_mb || 15000) * 0.5)}MB`}</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-dark-border overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-primary transition-all"
+                      style={{ width: `${Math.min(((config.batch_size * (config.image_size ** 2) / 40000) + 100) / ((hardware.gpu_vram_mb || 15000)) * 100, 50)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
         <div className="mt-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
           <button
