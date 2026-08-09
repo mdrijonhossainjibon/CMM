@@ -1,0 +1,51 @@
+# YOLO training outputs
+runs/
+
+# Dataset
+dataset/
+data.yaml
+
+# Models
+*.pt
+!backend/model/*.pt
+!yolov8n.pt
+
+# Cache files
+*.cache
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Env
+venv/
+.env
+
+# Uploads
+uploads/
+training_data/
+training_queue/
+
+# Exports
+exports/
+*.onnx
+*.engine
+*.zip
+
+# Logs
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
