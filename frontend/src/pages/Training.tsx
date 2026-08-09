@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import GlassPanel from '../components/common/GlassPanel';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Icon } from '../components/common/Icons';
-import { startTraining, getTrainingStatus, getTrainingTypes, getHardwareInfo, getOptimizePreview } from '../services/trainingService';
+import { startTraining, getTrainingStatus, getTrainingTypes, getHardwareInfo } from '../services/trainingService';
 import { getTrainingClasses } from '../services/trainingDataService';
 import { useWebSocket } from '../hooks';
 import type { TrainingStatusResponse, TrainingType, TrainingClass } from '../types';
