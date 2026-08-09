@@ -21,7 +21,9 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8000",
+        "https://*.vercel.app",
     ]
+    CORS_ALLOW_ALL: bool = False
 
     # Model
     MODEL_PATH: str = "backend/model/best.pt"
