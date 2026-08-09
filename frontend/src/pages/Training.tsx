@@ -301,10 +301,9 @@ export default function Training() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
 
         <div className="mt-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
           <button
