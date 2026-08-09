@@ -27,7 +27,6 @@ export default function DataUpload() {
   const [result, setResult] = useState('');
   const [classes, setClasses] = useState<TrainingClass[]>([]);
   const [totalImages, setTotalImages] = useState(0);
-  const [loadingClasses, setLoadingClasses] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -39,14 +38,11 @@ export default function DataUpload() {
   const [renameClass, setRenameClass] = useState('');
 
   const fetchClasses = useCallback(async () => {
-    setLoadingClasses(true);
     try {
       const res = await getTrainingClasses();
       setClasses(res.classes);
       setTotalImages(res.total_images);
-    } catch { /* ignore */ } finally {
-      setLoadingClasses(false);
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const fetchBrowseImages = useCallback(async (filterClass = '') => {
