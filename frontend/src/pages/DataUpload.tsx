@@ -13,7 +13,9 @@ import {
   renameTrainingImage,
 } from '../services/trainingDataService';
 import { getAssetUrl } from '../services/apiClient';
+import { pullTrainingDataFromR2, pushTrainingDataToR2, getR2Status } from '../services/r2Service';
 import type { TrainingClass, TrainingImage } from '../types';
+import toast from 'react-hot-toast';
 
 interface QueuedImage {
   file: File;
@@ -40,6 +42,48 @@ export default function DataUpload() {
   const [browseLoading, setBrowseLoading] = useState(false);
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameClass, setRenameClass] = useState('');
+  const [syncing, setSyncing] = useState<'pull' | 'push' | null>(null);
+  const [r2Configured, setR2Configured] = useState(false);
+
+  useEffect(() => {
+    getR2Status()
+      .then((s) => setR2Configured(s.configured))
+      .catch(() => setR2Configured(false));
+  }, []);
+
+  const handleSyncFromR2 = async () => {
+    setSyncing('pull');
+    try {
+      const res = await pullTrainingDataFromR2();
+      if (res.success) {
+        toast.success(`Downloaded ${res.downloaded ?? 0} image(s) from R2 backup!`);
+        fetchClasses();
+        fetchBrowseImages(browseFilter);
+      } else {
+        toast.error(res.message || 'No data found in R2 backup');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to sync from R2');
+    } finally {
+      setSyncing(null);
+    }
+  };
+
+  const handlePushToR2 = async () => {
+    setSyncing('push');
+    try {
+      const res = await pushTrainingDataToR2();
+      if (res.success) {
+        toast.success(`Uploaded ${res.uploaded ?? 0} image(s) to R2 backup!`);
+      } else {
+        toast.error(res.message || 'No data to push');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to sync to R2');
+    } finally {
+      setSyncing(null);
+    }
+  };
 
   const fetchClasses = useCallback(async () => {
     try {
@@ -187,7 +231,7 @@ export default function DataUpload() {
   return (
     <div className="space-y-6">
       <GlassPanel padding={false}>
-        <div className="flex border-b border-dark-border overflow-x-auto">
+        <div className="flex border-b border-dark-border overflow-x-auto items-center">
           {(['upload', 'browse'] as const).map((t) => (
             <button
               key={t}
@@ -199,6 +243,29 @@ export default function DataUpload() {
               {t === 'upload' ? 'Upload' : 'Browse & Manage'} {t === 'browse' ? `(${totalImages})` : ''}
             </button>
           ))}
+          <div className="flex-1" />
+          {r2Configured && (
+            <div className="flex items-center gap-2 pr-3 shrink-0">
+              <button
+                onClick={handlePushToR2}
+                disabled={syncing !== null}
+                className="flex items-center gap-1.5 text-[11px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg border border-dark-border text-dark-text hover:text-dark-heading hover:bg-dark-surface transition-colors disabled:opacity-50"
+                title="Push local data to R2 backup"
+              >
+                <Icon name="upload" className="w-3.5 h-3.5" />
+                {syncing === 'push' ? 'Uploading...' : 'Push to R2'}
+              </button>
+              <button
+                onClick={handleSyncFromR2}
+                disabled={syncing !== null}
+                className="flex items-center gap-1.5 text-[11px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-primary text-white font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
+                title="Download data from R2 backup"
+              >
+                <Icon name={syncing === 'pull' ? 'refresh' : 'download'} className={`w-3.5 h-3.5 ${syncing === 'pull' ? 'animate-spin' : ''}`} />
+                {syncing === 'pull' ? 'Syncing...' : 'Sync from R2'}
+              </button>
+            </div>
+          )}
         </div>
       </GlassPanel>
 
