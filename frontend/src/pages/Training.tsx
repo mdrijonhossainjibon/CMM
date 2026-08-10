@@ -5,8 +5,10 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Icon } from '../components/common/Icons';
 import { startTraining, getTrainingStatus, getTrainingTypes, getHardwareInfo } from '../services/trainingService';
 import { getTrainingClasses } from '../services/trainingDataService';
+import { pullTrainingDataFromR2, getR2Status } from '../services/r2Service';
 import { useWebSocket } from '../hooks';
 import type { TrainingStatusResponse, TrainingType, TrainingClass } from '../types';
+import toast from 'react-hot-toast';
 
 const DEFAULT_CONFIG = {
   training_type: 'aws',
@@ -29,6 +31,8 @@ export default function Training() {
   const [hardware, setHardware] = useState<{ device_type: string; gpu_name?: string; gpu_vram_mb?: number } | null>(null);
   const [trainingClasses, setTrainingClasses] = useState<TrainingClass[]>([]);
   const [totalTrainImages, setTotalTrainImages] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [r2Configured, setR2Configured] = useState(false);
 
   const wsPath = status?.running ? '/ws/training/logs' : null;
   const { messages: wsMessages, isConnected: wsConnected } = useWebSocket(wsPath);
@@ -48,6 +52,37 @@ export default function Training() {
     }
   }, [pollInterval]);
 
+  const fetchClasses = useCallback(async () => {
+    try {
+      const res = await getTrainingClasses();
+      setTrainingClasses(res.classes);
+      setTotalTrainImages(res.total_images);
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleSyncFromR2 = async () => {
+    setSyncing(true);
+    try {
+      const res = await pullTrainingDataFromR2();
+      if (res.success) {
+        toast.success(`Downloaded ${res.downloaded ?? 0} image(s) from R2 backup!`);
+        fetchClasses();
+      } else {
+        toast.error(res.message || 'No data found in R2 backup');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to sync from R2');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    getR2Status()
+      .then((s) => setR2Configured(s.configured))
+      .catch(() => setR2Configured(false));
+  }, []);
+
   useEffect(() => {
     fetchStatus();
     getTrainingTypes()
@@ -60,16 +95,11 @@ export default function Training() {
         if (res.hardware) setHardware(res.hardware);
       })
       .catch(() => {});
-    getTrainingClasses()
-      .then((res) => {
-        setTrainingClasses(res.classes);
-        setTotalTrainImages(res.total_images);
-      })
-      .catch(() => {});
+    fetchClasses();
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, []);
+  }, [fetchStatus, fetchClasses, pollInterval]);
 
   useEffect(() => {
     if (status?.running && !pollInterval) {
@@ -116,11 +146,32 @@ export default function Training() {
           {totalTrainImages > 0 && (
             <span className="text-xs text-dark-text font-normal">({totalTrainImages} images)</span>
           )}
+          {r2Configured && (
+            <button
+              onClick={handleSyncFromR2}
+              disabled={syncing}
+              className="ml-auto flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+              title="Sync training data from R2 backup"
+            >
+              <Icon name={syncing ? 'refresh' : 'download'} className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync from R2'}
+            </button>
+          )}
         </h2>
         {trainingClasses.length === 0 ? (
           <div className="text-center py-4">
             <Icon name="empty" className="w-6 h-6 text-dark-text/20 mx-auto mb-2" />
             <p className="text-xs text-dark-text/60">No training data yet. Upload images from Data Upload page.</p>
+            {r2Configured && (
+              <button
+                onClick={handleSyncFromR2}
+                disabled={syncing}
+                className="mt-3 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto"
+              >
+                <Icon name={syncing ? 'refresh' : 'download'} className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Downloading from R2...' : 'Sync Data from R2'}
+              </button>
+            )}
           </div>
         ) : (
           <>
