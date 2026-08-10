@@ -22,6 +22,54 @@ Local CPU te training slow, Colab GPU te **10-20x fast**, VPS GPU te **full-time
 
 ---
 
+## ⏱ Training Speed + VRAM/RAM Estimate
+
+### VRAM (GPU Memory) Requirement — Image Size vs Batch Size
+
+| Img Size | Batch 8 | Batch 16 | Batch 32 | Batch 64 | Batch 128 |
+|---|---|---|---|---|---|
+| **640** | ~1.5 GB | ~3 GB | ~6 GB | ~12 GB | ~24 GB |
+| **480** | ~0.8 GB | ~1.7 GB | ~3.4 GB | ~6.8 GB | ~13 GB |
+| **416** | ~0.6 GB | ~1.3 GB | ~2.6 GB | ~5.2 GB | ~10 GB |
+
+> **Colab T4 = 16GB VRAM** → 640 size e batch 32 thik.
+> **VRAM beshi na thakle:** image size koman (640 → 480) ba batch koman.
+
+### RAM Requirement
+
+| Hardware | RAM lagbe | Note |
+|---|---|---|
+| Colab | 12.7 GB (fixed) | T4 GPU soho free |
+| VPS GPU (RTX 4090) | 16-32 GB | System + data load |
+| VPS GPU (A100) | 32-64 GB | Boro dataset er jonno |
+| VPS CPU | 4-8 GB | Batch 8-16 e cholbe |
+
+### Estimated Training Time (100 epochs, 640 img)
+
+| Images | Colab T4 | RTX 4090 | Local CPU |
+|---|---|---|---|
+| **100** | ~25-35 min | ~10-15 min | ~3-5 hr |
+| **300** | ~1-1.5 hr | ~30-45 min | ~8-12 hr |
+| **500** | ~1.5-2.5 hr | ~45-70 min | ~14-20 hr |
+| **1000** | ~3-5 hr | ~1.5-2 hr | ~30-40 hr |
+
+> **Formula (approx):** Colab T4 e ~1000 image/100 epoch ≈ 2.5-3.5 GB model, time = `(images × epochs) ÷ 8000` minute (approx).
+> **50 epochs quick test:** uporer somoy er prothom dike. Test korar jonno 50 epoch → Colab e 100 image ≈ 12-18 min.
+
+### Kon Batch Size Use Korben
+
+| Hardware | Batch | Image Size | Epochs |
+|---|---|---|---|
+| **Colab T4** | 32 | 640 | 100-150 |
+| **RTX 4090 (24GB)** | 64 | 640 | 100 |
+| **A100 (80GB)** | 128 | 640 | 100 |
+| **Local CPU** | 8-16 | 480 | 100-200 |
+| **Quick test** | 16 | 480 | 30-50 |
+
+> **OOM (out of memory) hole:** batch koman → image size koman → train.
+
+---
+
 ## 🖥 VPS Setup (Ubuntu 22.04)
 
 DigitalOcean / Vultr / Hetzner e Ubuntu VPS hole:
@@ -236,6 +284,8 @@ print("Keep-alive on")
 | Cost | Free | $0.3-1/hr | $5-20/mo |
 | Batch | 32-64 | 64-128 | 8-16 |
 | Uptime | ~12hr | 24/7 | 24/7 |
+| 100 img/100 ep | ~30 min | ~12 min | ~4 hr |
+| 500 img/100 ep | ~2 hr | ~1 hr | ~17 hr |
 
 ## Common Errors
 
