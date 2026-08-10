@@ -53,6 +53,18 @@ Local CPU te training slow, Colab GPU te **10-20x fast**, VPS GPU te **full-time
 | **500** | ~1.5-2.5 hr | ~45-70 min | ~14-20 hr |
 | **1000** | ~3-5 hr | ~1.5-2 hr | ~30-40 hr |
 
+### Estimated Training Time (40 epochs, 640 img) — quick/small model
+
+| Images | Colab T4 | RTX 4090 | Local CPU |
+|---|---|---|---|
+| **100** | ~10-14 min | ~4-6 min | ~1-2 hr |
+| **300** | ~24-36 min | ~12-18 min | ~3-5 hr |
+| **500** | ~36-60 min | ~18-28 min | ~6-8 hr |
+| **1000** | ~1.2-2 hr | ~36-48 min | ~12-16 hr |
+
+> **40 epochs:** kom epoch — durbal model hobe, kintu fast. Testing/prototype er jonno bhalo.
+> **Rule:** 40 epochs → basic model, 100-150 epochs → bhalo model, 200+ → overfit (khub beshi).
+
 > **Formula (approx):** Colab T4 e ~1000 image/100 epoch ≈ 2.5-3.5 GB model, time = `(images × epochs) ÷ 8000` minute (approx).
 > **50 epochs quick test:** uporer somoy er prothom dike. Test korar jonno 50 epoch → Colab e 100 image ≈ 12-18 min.
 
@@ -286,6 +298,8 @@ print("Keep-alive on")
 | Uptime | ~12hr | 24/7 | 24/7 |
 | 100 img/100 ep | ~30 min | ~12 min | ~4 hr |
 | 500 img/100 ep | ~2 hr | ~1 hr | ~17 hr |
+| 100 img/40 ep | ~12 min | ~5 min | ~1.5 hr |
+| 500 img/40 ep | ~45 min | ~23 min | ~7 hr |
 
 ## Common Errors
 
