@@ -141,13 +141,33 @@ async def list_training_images(request: Request, class_name: str = ""):
     return {"images": images}
 
 
+async def _r2_delete_object(r2_key: str):
+    """Delete single object from R2 backup (manual delete/rename er jonno)."""
+    try:
+        from backend.services.r2_service import r2_service
+        if await r2_service._is_configured():
+            await r2_service.delete_object(r2_key)
+    except Exception as e:
+        logger.warning("R2 delete failed [%s]: %s", r2_key, e)
+
+
+async def _r2_upload_file(local_path: str, r2_key: str):
+    """Upload single file to R2 backup (rename er pore)."""
+    try:
+        from backend.services.r2_service import r2_service
+        if await r2_service._is_configured():
+            await r2_service.upload_file(local_path, r2_key)
+    except Exception as e:
+        logger.warning("R2 upload failed [%s]: %s", r2_key, e)
+
+
 @router.delete("/training-data/delete")
 async def delete_training_image(filename: str):
     filepath = os.path.join(settings.TRAINING_DATA_DIR, filename)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="File not found")
     os.remove(filepath)
-    asyncio.create_task(_auto_sync_training_data())
+    await _r2_delete_object(f"training-data/{filename}")
     return {"success": True, "deleted": filename}
 
 
@@ -158,13 +178,21 @@ async def delete_training_class(class_name: str):
         raise HTTPException(status_code=404, detail="Training data directory not found")
 
     deleted = 0
+    removed = []
     for f in os.listdir(data_dir):
         if f.startswith(class_name.lower()):
             os.remove(os.path.join(data_dir, f))
+            removed.append(f)
             deleted += 1
 
-    if deleted:
-        asyncio.create_task(_auto_sync_training_data())
+    if removed:
+        try:
+            from backend.services.r2_service import r2_service
+            if await r2_service._is_configured():
+                for f in removed:
+                    await r2_service.delete_object(f"training-data/{f}")
+        except Exception as e:
+            logger.warning("R2 class delete sync failed: %s", e)
     return {"success": True, "deleted_count": deleted, "class": class_name}
 
 
@@ -187,7 +215,9 @@ async def rename_training_image(filename: str, new_class: str):
         raise HTTPException(status_code=409, detail=f"File '{new_filename}' already exists")
 
     os.rename(old_path, new_path)
-    asyncio.create_task(_auto_sync_training_data())
+    # R2 backup update: old delete + new upload (ekbar kore)
+    await _r2_delete_object(f"training-data/{filename}")
+    await _r2_upload_file(new_path, f"training-data/{new_filename}")
     return {"success": True, "old_name": filename, "new_name": new_filename, "class": safe_new}
 
 
