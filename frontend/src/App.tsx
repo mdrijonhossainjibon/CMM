@@ -9,6 +9,7 @@ import Training from './pages/Training';
 import DataUpload from './pages/DataUpload';
 import Models from './pages/Models';
 import Analytics from './pages/Analytics';
+import Datasets from './pages/Datasets';
 import Logs from './pages/Logs';
 import Migrate from './pages/Migrate';
 import Settings from './pages/Settings';
@@ -46,6 +47,7 @@ function AppRoutes() {
           <Route path="data-upload" element={<DataUpload />} />
           <Route path="models" element={<Models />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="datasets" element={<Datasets />} />
           <Route path="logs" element={<Logs />} />
           <Route path="migrate" element={<Migrate />} />
           <Route path="settings" element={<Settings />} />
@@ -54,7 +56,7 @@ function AppRoutes() {
         <Route path="/object-detection" element={<Navigate to="/" replace />} />
         <Route path="/object-detection/train" element={<Navigate to="/training" replace />} />
         <Route path="/object-detection/models" element={<Navigate to="/models" replace />} />
-        <Route path="/object-detection/datasets" element={<Navigate to="/data-upload" replace />} />
+        <Route path="/object-detection/datasets" element={<Navigate to="/datasets" replace />} />
         <Route path="/object-detection/settings" element={<Navigate to="/settings" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
