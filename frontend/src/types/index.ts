@@ -3,11 +3,6 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface RegisterRequest {
-  username: string;
-  password: string;
-}
-
 export interface TokenResponse {
   access_token: string;
   token_type?: string;
@@ -30,6 +25,9 @@ export interface DetectResponse {
   success: boolean;
   detected_objects: DetectionObject[];
   count: number;
+  model_name?: string;
+  model_type?: string;
+  model_classes?: string[];
 }
 
 export interface BatchDetectRequest {
@@ -69,6 +67,10 @@ export interface ModelInfo {
   filename: string;
   path: string;
   size: string;
+  classes: string[];
+  created_at?: string;
+  source?: 'system' | 'local' | 'cloud';
+  is_system?: boolean;
 }
 
 export interface ModelListResponse {
@@ -87,11 +89,6 @@ export interface DatasetImageResponse {
   path: string;
   source?: string;
   classes?: string[];
-}
-
-export interface LogEntry {
-  logs: string[];
-  count: number;
 }
 
 export interface SaveTrainingDataResponse {
@@ -217,6 +214,10 @@ export interface ExportItem {
   filename: string;
   size: string;
   path: string;
+  classes: string[];
+  created_at?: string;
+  source?: 'system' | 'local' | 'cloud';
+  is_system?: boolean;
 }
 
 export interface ExportsResponse {

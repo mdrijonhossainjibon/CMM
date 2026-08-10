@@ -1,37 +1,57 @@
-import os
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
 
-from backend.core.config import settings
+from backend.services.log_service import log_service
 
 router = APIRouter(prefix="/api/logs", tags=["Logs"])
 
 
 @router.get("")
 async def get_logs():
-    logs_dir = settings.LOGS_DIR
-    if not os.path.exists(logs_dir):
-        return JSONResponse({"logs": [], "count": 0})
-    log_files = sorted(
-        [
-            f
-            for f in os.listdir(logs_dir)
-            if f.endswith(".txt") or f.endswith(".log") or f.endswith(".csv")
-        ],
-        reverse=True,
-    )
-    return JSONResponse({"logs": log_files, "count": len(log_files)})
+    sessions = await log_service.list_sessions()
+    return {"logs": sessions, "count": len(sessions)}
 
 
 @router.get("/read")
-async def read_log_file(file: str):
-    logs_dir = settings.LOGS_DIR
-    filepath = os.path.join(logs_dir, file)
-    if not os.path.exists(filepath) or not os.path.isfile(filepath):
-        raise HTTPException(status_code=404, detail="Log file not found")
-    try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-        return JSONResponse(content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read log: {str(e)}")
+async def read_log_session(session_id: str = None, file: str = None):
+    if session_id:
+        session = await log_service.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Log session not found")
+        return {
+            "id": session["id"],
+            "name": session["name"],
+            "status": session["status"],
+            "progress": session["progress"],
+            "content": "\n".join(session["lines"]),
+        }
+
+    # Backward-compatible: allow reading raw log files
+    if file:
+        import os
+        from backend.core.config import settings
+        filepath = os.path.join(settings.LOGS_DIR, file)
+        if not os.path.exists(filepath) or not os.path.isfile(filepath):
+            raise HTTPException(status_code=404, detail="Log file not found")
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                return {"id": file, "name": file, "status": "unknown", "progress": 0, "content": f.read()}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to read log: {str(e)}")
+
+    raise HTTPException(status_code=400, detail="Provide session_id or file")
+
+
+@router.get("/session/{session_id}")
+async def get_session(session_id: str):
+    session = await log_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Log session not found")
+    return {"success": True, "session": session}
+
+
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str):
+    ok = await log_service.delete_session(session_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Log session not found")
+    return {"success": True, "deleted": session_id}

@@ -18,6 +18,9 @@ class DetectResponse(BaseModel):
     success: bool
     detected_objects: List[DetectionObject]
     count: int
+    model_name: str = ""
+    model_type: str = ""
+    model_classes: List[str] = []
 
 
 class BatchDetectResponse(BaseModel):

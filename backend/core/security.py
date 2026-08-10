@@ -5,6 +5,7 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.core.config import settings
+from backend.services.user_service import UserService
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
@@ -35,23 +36,6 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
-# Simple in-memory user store (can be replaced with DB later)
-USERS_DB = {
-    "admin": {
-        "username": "admin",
-        "password": get_password_hash("admin123"),
-        "role": "admin",
-    }
-}
-
-
-def authenticate_user(username: str, password: str) -> Optional[dict]:
-    user = USERS_DB.get(username)
-    if not user or not verify_password(password, user["password"]):
-        return None
-    return {"username": user["username"], "role": user["role"]}
-
-
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
@@ -70,9 +54,33 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     username = payload.get("sub")
-    if username is None or username not in USERS_DB:
+    if username is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    user_service = UserService()
+    user = await user_service.find_by_username(username)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
-    return {"username": username, "role": USERS_DB[username]["role"]}
+
+    return {"username": user["username"], "role": user["role"]}
+
+
+def require_role(*roles: str):
+    async def role_checker(current_user: dict = Depends(get_current_user)):
+        if current_user["role"] not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return current_user
+    return role_checker
+
+
+require_super_admin = require_role("super_admin")
+require_admin = require_role("super_admin", "admin")

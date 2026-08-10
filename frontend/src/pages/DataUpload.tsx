@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import GlassPanel from '../components/common/GlassPanel';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
@@ -30,6 +30,9 @@ export default function DataUpload() {
   const fileRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [comboOpen, setComboOpen] = useState(false);
+  const [comboHighlight, setComboHighlight] = useState(-1);
+  const comboRef = useRef<HTMLDivElement>(null);
 
   const [browseImages, setBrowseImages] = useState<TrainingImage[]>([]);
   const [browseFilter, setBrowseFilter] = useState('');
@@ -60,8 +63,52 @@ export default function DataUpload() {
   useEffect(() => { fetchClasses(); }, [fetchClasses]);
   useEffect(() => { if (tab === 'browse') fetchBrowseImages(browseFilter); }, [tab, browseFilter, fetchBrowseImages]);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (comboRef.current && !comboRef.current.contains(e.target as Node)) {
+        setComboOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredClasses = classes.filter((c) =>
+    c.name.toLowerCase().includes(className.toLowerCase())
+  );
+  const exactMatch = classes.some((c) => c.name.toLowerCase() === className.trim().toLowerCase());
+  const showCombo = comboOpen && className.length === 0;
+
+  const selectClass = (name: string) => {
+    setClassName(name);
+    setComboOpen(false);
+    setComboHighlight(-1);
+  };
+
+  const handleComboKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setComboHighlight((prev) => Math.min(prev + 1, filteredClasses.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setComboHighlight((prev) => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter' && comboHighlight >= 0 && filteredClasses[comboHighlight]) {
+      e.preventDefault();
+      selectClass(filteredClasses[comboHighlight].name);
+    } else if (e.key === 'Escape') {
+      setComboOpen(false);
+    }
+  };
+
+  const isImage = (f: File) => {
+    if (f.type.startsWith('image/')) return true;
+    const ext = f.name.split('.').pop()?.toLowerCase();
+    const supported = ['heic', 'heif', 'jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff'];
+    return supported.includes(ext || '');
+  };
+
   const addFiles = useCallback((files: FileList | File[]) => {
-    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    const arr = Array.from(files).filter(isImage);
     const newItems: QueuedImage[] = arr.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
@@ -114,7 +161,7 @@ export default function DataUpload() {
   };
 
   const handleDeleteClass = async (cls: string) => {
-    try { await deleteTrainingClass(cls); fetchClasses(); fetchBrowseImages(browseFilter); } catch { /* ignore */ }
+    try { await deleteTrainingClass(cls); setBrowseFilter(''); fetchClasses(); fetchBrowseImages(''); } catch { /* ignore */ }
   };
 
   const handleDeleteImage = async (filename: string) => {
@@ -159,16 +206,92 @@ export default function DataUpload() {
         <GlassPanel>
           <h2 className="text-base font-semibold text-dark-heading mb-4">Upload Training Images</h2>
 
-          <div className="mb-4">
-            <label className="block text-xs text-dark-text mb-1">Class Name</label>
-            <input
-              type="text"
-              value={className}
-              onChange={(e) => setClassName(e.target.value)}
-              placeholder="e.g. car, person, dog"
-              className="w-full px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
-            />
+          <div className="mb-4" ref={comboRef}>
+            <label className="block text-xs text-dark-text mb-1.5">Class Name</label>
+            <div className="relative">
+              <div className="flex gap-0">
+                <input
+                  type="text"
+                  value={className}
+                  onChange={(e) => {
+                    setClassName(e.target.value);
+                    setComboOpen(true);
+                    setComboHighlight(-1);
+                  }}
+                  onFocus={() => { setComboOpen(true); setComboHighlight(-1); }}
+                  onKeyDown={handleComboKeyDown}
+                  placeholder={classes.length > 0 ? 'Type or select class...' : 'e.g. car, person, dog'}
+                  className="w-full px-3 py-2 rounded-l-lg bg-dark-surface border border-r-0 border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
+                />
+                <button
+                  onClick={() => { setComboOpen(!comboOpen); setComboHighlight(-1); }}
+                  className="px-2.5 rounded-r-lg bg-dark-surface border border-dark-border text-dark-text hover:text-dark-heading transition-colors"
+                >
+                  <Icon name="chevronLeft" className={`w-4 h-4 transition-transform ${comboOpen ? 'rotate-90' : '-rotate-90'}`} />
+                </button>
+              </div>
+              <AnimatePresence>
+                {(comboOpen || (className && !exactMatch)) && (
+                  <motion.ul
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="absolute z-30 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-dark-surface border border-dark-border rounded-lg shadow-xl"
+                  >
+                    {filteredClasses.length > 0 ? (
+                      filteredClasses.map((c, idx) => (
+                        <li
+                          key={c.name}
+                          onMouseDown={(e) => { e.preventDefault(); selectClass(c.name); }}
+                          onMouseEnter={() => setComboHighlight(idx)}
+                          className={`flex items-center justify-between px-3 py-2 text-sm cursor-pointer transition-colors ${
+                            comboHighlight === idx ? 'bg-primary/10 text-primary' : 'text-dark-heading hover:bg-dark-surface/80'
+                          }`}
+                        >
+                          <span>{c.name}</span>
+                          <span className="text-xs text-dark-text/60">{c.count} img</span>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="px-3 py-2 text-sm text-dark-text/60 italic">
+                        {className.trim() ? `New class: "${className.trim()}"` : 'No classes found. Type a name to create.'}
+                      </li>
+                    )}
+                  </motion.ul>
+                )}
+              </AnimatePresence>
+            </div>
+            {className.trim() && !exactMatch && (
+              <p className="text-[11px] text-primary/80 mt-1">
+                + New class <strong>"{className.trim()}"</strong> will be created
+              </p>
+            )}
           </div>
+
+          {classes.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[10px] uppercase tracking-wider text-dark-text/50 mb-2">Existing Classes</p>
+              <div className="flex flex-wrap gap-1.5">
+                {classes.map((c) => (
+                  <button
+                    key={c.name}
+                    onClick={() => {
+                      setClassName(c.name);
+                      setComboOpen(false);
+                    }}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                      className.toLowerCase() === c.name.toLowerCase()
+                        ? 'bg-primary/20 border-primary text-primary'
+                        : 'bg-dark-surface border-dark-border text-dark-text hover:border-dark-text/40 hover:text-dark-heading'
+                    }`}
+                  >
+                    {c.name}
+                    <span className="ml-1 opacity-50">({c.count})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div
             ref={dropRef}
@@ -185,7 +308,7 @@ export default function DataUpload() {
             <p className="text-sm text-dark-text">
               {dragOver ? 'Drop images here' : 'Drag & drop images, or click to browse'}
             </p>
-            <p className="text-xs text-dark-text/60 mt-1">JPG, PNG, WEBP — multiple files supported</p>
+            <p className="text-xs text-dark-text/60 mt-1">JPG, PNG, WEBP, HEIC — multiple files supported</p>
           </div>
 
           {queue.length > 0 && (
@@ -224,7 +347,7 @@ export default function DataUpload() {
               disabled={uploading || queue.length === 0 || !className.trim()}
               className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
             >
-              {uploading ? 'Uploading...' : `Upload ${queue.length} image(s)`}
+              {uploading ? 'Uploading...' : `Upload ${queue.length} image(s) to "${className.trim() || '?'}"`}
             </button>
             {result && <p className="text-xs text-dark-text">{result}</p>}
           </div>

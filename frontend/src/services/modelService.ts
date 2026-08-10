@@ -8,6 +8,18 @@ export async function listModels(): Promise<ModelListResponse> {
   return res.data;
 }
 
+export async function useModel(path: string): Promise<{ success: boolean; message?: string }> {
+  const res = await client.post('/models/use', { path }, { timeout: 60000 });
+  return res.data;
+}
+
+export async function deleteModel(path: string): Promise<{ success: boolean; deleted?: string }> {
+  const res = await client.delete(`/models/${encodeURIComponent(path)}`, {
+    timeout: 10000,
+  });
+  return res.data;
+}
+
 export async function downloadModel(path: string): Promise<void> {
   const res = await client.get(`/models/download/${path}`, {
     responseType: 'blob',

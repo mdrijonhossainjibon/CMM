@@ -12,9 +12,19 @@ _model_paths = {
 
 _detectors: dict[str, CaptchaDetector] = {}
 
+_active_model_path: str = "backend/model/best.pt"
+
 
 def _get_model_path(model_type: str) -> str:
-    return _model_paths.get(model_type, "backend/model/best.pt")
+    if model_type == "auto":
+        return _active_model_path
+    return _model_paths.get(model_type, _active_model_path)
+
+
+def set_active_model(path: str):
+    global _active_model_path, _detectors
+    _active_model_path = path
+    _detectors.clear()
 
 
 def get_detector(model_type: str = "auto") -> CaptchaDetector:

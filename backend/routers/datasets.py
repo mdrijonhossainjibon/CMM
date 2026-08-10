@@ -106,6 +106,45 @@ async def upload_dataset(file: UploadFile = File(...), dataset_type: str = "trai
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/{dataset_type}/image")
+async def delete_dataset_image(dataset_type: str, file: str = Query(...)):
+    if dataset_type not in ("train", "val"):
+        raise HTTPException(status_code=400, detail="dataset_type must be 'train' or 'val'")
+
+    target_dir = os.path.join(settings.DATASET_DIR, dataset_type, "images")
+    filepath = os.path.join(target_dir, file)
+
+    if not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="File not found in dataset")
+
+    os.remove(filepath)
+    _clear_dataset_caches()
+    return {"success": True, "deleted": file, "type": dataset_type}
+
+
+@router.delete("/{dataset_type}/class/{class_name}")
+async def delete_dataset_class(dataset_type: str, class_name: str):
+    if dataset_type not in ("train", "val"):
+        raise HTTPException(status_code=400, detail="dataset_type must be 'train' or 'val'")
+
+    target_dir = os.path.join(settings.DATASET_DIR, dataset_type, "images")
+    if not os.path.exists(target_dir):
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_type}' not found")
+
+    prefix = class_name.strip().lower() + "_"
+    deleted = 0
+    for f in os.listdir(target_dir):
+        if f.lower().startswith(prefix) and os.path.isfile(os.path.join(target_dir, f)):
+            os.remove(os.path.join(target_dir, f))
+            deleted += 1
+
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail=f"No images found for class '{class_name}'")
+
+    _clear_dataset_caches()
+    return {"success": True, "deleted_count": deleted, "class": class_name, "type": dataset_type}
+
+
 @router.delete("/{dataset_type}")
 async def delete_dataset(dataset_type: str):
     if dataset_type not in ("train", "val"):
@@ -122,4 +161,15 @@ async def delete_dataset(dataset_type: str):
             os.remove(filepath)
             deleted += 1
 
+    _clear_dataset_caches()
     return {"success": True, "deleted_count": deleted, "type": dataset_type}
+
+
+def _clear_dataset_caches():
+    for root, _, files in os.walk(settings.DATASET_DIR):
+        for f in files:
+            if f.endswith((".cache", ".npy")):
+                try:
+                    os.remove(os.path.join(root, f))
+                except OSError:
+                    pass

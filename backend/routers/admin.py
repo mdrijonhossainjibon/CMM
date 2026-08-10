@@ -4,8 +4,9 @@ import platform
 import subprocess
 from fastapi import APIRouter, Depends
 
-from backend.core.security import get_current_user, USERS_DB
+from backend.core.security import get_current_user
 from backend.core.config import settings
+from backend.services.user_service import UserService
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -25,10 +26,8 @@ def _get_dir_size(path: str) -> int:
 
 @router.get("/users")
 async def list_users(current_user: dict = Depends(get_current_user)):
-    users = [
-        {"username": u["username"], "role": u["role"]}
-        for u in USERS_DB.values()
-    ]
+    user_service = UserService()
+    users = await user_service.list_users()
     return {"success": True, "users": users}
 
 
@@ -56,9 +55,11 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
             if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
         ])
 
+    user_service = UserService()
+    users = await user_service.list_users()
     return {
         "success": True,
-        "total_users": len(USERS_DB),
+        "total_users": len(users),
         "total_models": models_count,
         "total_datasets": datasets_count,
         "total_detections": 0,

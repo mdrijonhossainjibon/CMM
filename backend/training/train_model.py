@@ -13,6 +13,162 @@ from ultralytics import YOLO
 logger = logging.getLogger("captchamaster.training")
 
 
+class MongoLogSession:
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self._client = None
+        self._db = None
+
+    def _connect(self):
+        if self._db is None:
+            from pymongo import MongoClient
+            mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+            db_name = os.environ.get("MONGODB_DB_NAME", "captchamaster")
+            self._client = MongoClient(mongo_uri, serverSelectionTimeoutMS=3000)
+            self._db = self._client[db_name]
+
+    def log(self, message: str, *args):
+        if not self.session_id:
+            return
+        try:
+            self._connect()
+            from bson import ObjectId
+            text = message % args if args else message
+            self._db["logs"].update_one(
+                {"_id": ObjectId(self.session_id)},
+                {"$push": {"lines": text}},
+            )
+        except Exception:
+            pass
+
+    def progress(self, percent: int):
+        if not self.session_id:
+            return
+        try:
+            self._connect()
+            from bson import ObjectId
+            self._db["logs"].update_one(
+                {"_id": ObjectId(self.session_id)},
+                {"$set": {"progress": percent}},
+            )
+        except Exception:
+            pass
+
+    def complete(self, status: str):
+        if not self.session_id:
+            return
+        try:
+            self._connect()
+            from bson import ObjectId
+            self._db["logs"].update_one(
+                {"_id": ObjectId(self.session_id)},
+                {
+                    "$set": {
+                        "status": status,
+                        "progress": 100 if status == "completed" else None,
+                        "ended_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    }
+                },
+            )
+        except Exception:
+            pass
+        finally:
+            if self._client:
+                try:
+                    self._client.close()
+                except Exception:
+                    pass
+
+
+def _safe_copy_file(src: Path, dst: str):
+    """Copy src to dst safely on Windows, handling locked destination files."""
+    import tempfile as _tempfile
+
+    dst_path = Path(dst)
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = dst_path.parent / f".{dst_path.name}.tmp"
+
+    for attempt in range(5):
+        try:
+            shutil.copyfile(src, tmp_path)
+            break
+        except OSError as e:
+            if attempt == 4:
+                logger.error("Failed to stage temp copy to %s: %s", tmp_path, e)
+                raise
+            time.sleep(0.5)
+
+    for attempt in range(5):
+        try:
+            if dst_path.exists():
+                os.remove(dst_path)
+            os.replace(tmp_path, dst_path)
+            logger.info("Safe copy complete: %s", dst_path)
+            return
+        except OSError as e:
+            if attempt == 4:
+                # Last resort: plain copy to a fallback file
+                fallback = dst_path.parent / f"{dst_path.name}.new"
+                try:
+                    shutil.copyfile(src, fallback)
+                    logger.warning("Destination locked, saved fallback: %s", fallback)
+                except OSError:
+                    logger.error("Final copy to %s failed: %s", dst_path, e)
+                    raise
+                return
+            time.sleep(1.0)
+
+
+def _upload_to_r2(local_path: str, r2_key: str):
+    try:
+        cfg = _get_r2_config_from_db()
+        if not cfg or not cfg.get("r2_enabled") or not cfg.get("r2_endpoint_url"):
+            logger.debug("R2 not configured — skipping upload for %s", r2_key)
+            return
+
+        import boto3
+        from botocore.config import Config
+
+        client = boto3.client(
+            "s3",
+            endpoint_url=cfg["r2_endpoint_url"],
+            aws_access_key_id=cfg["r2_access_key_id"],
+            aws_secret_access_key=cfg["r2_secret_access_key"],
+            config=Config(region_name=cfg.get("r2_region", "auto"), signature_version="s3v4"),
+        )
+        client.upload_file(local_path, cfg.get("r2_bucket_name", "captchamaster"), r2_key)
+        logger.info("R2 upload complete: %s", r2_key)
+    except Exception as e:
+        logger.warning("R2 upload skipped [%s]: %s", r2_key, e)
+
+
+def _get_r2_config_from_db() -> dict | None:
+    try:
+        from pymongo import MongoClient
+
+        mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+        db_name = os.environ.get("MONGODB_DB_NAME", "captchamaster")
+
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=3000)
+        db = client[db_name]
+        doc = db["app_settings"].find_one({"_id": "app_config"})
+        client.close()
+
+        if not doc:
+            return None
+        return {
+            "r2_enabled": doc.get("r2_enabled", False),
+            "r2_endpoint_url": doc.get("r2_endpoint_url", ""),
+            "r2_access_key_id": doc.get("r2_access_key_id", ""),
+            "r2_secret_access_key": doc.get("r2_secret_access_key", ""),
+            "r2_bucket_name": doc.get("r2_bucket_name", "captchamaster"),
+            "r2_region": doc.get("r2_region", "auto"),
+        }
+    except Exception as e:
+        logger.debug("Could not read R2 config from MongoDB: %s", e)
+        return None
+
+
 def prepare_yolo_data(filter_classes=None):
     """Prepare YOLO dataset from training_data/ directory.
     If filter_classes is provided, only include images from those classes.
@@ -157,19 +313,25 @@ def train():
     image_size = int(os.environ.get("TRAIN_IMAGE_SIZE", "640"))
     workers = int(os.environ.get("TRAIN_WORKERS", "8"))
     device = os.environ.get("TRAINING_DEVICE", "auto")
+    session_id = os.environ.get("TRAIN_SESSION_ID", "")
     selected_classes_raw = os.environ.get("TRAIN_SELECTED_CLASSES", "")
     selected_classes = [c.strip() for c in selected_classes_raw.split(",") if c.strip()] if selected_classes_raw else None
+
+    db_session = MongoLogSession(session_id)
 
     import torch
     if device != "cpu" and not torch.cuda.is_available():
         logger.warning("CUDA not available — falling back to CPU (training will be slower)")
         device = "cpu"
     logger.info("Using device: %s", device)
+    db_session.log("Using device: %s", device)
 
     data_yaml = prepare_yolo_data(selected_classes)
 
     if data_yaml is None:
         logger.error("Training aborted: No data available.")
+        db_session.log("ERROR: Training aborted - no data available.")
+        db_session.complete("failed")
         return
 
     output_name = get_output_name(dataset_type)
@@ -179,8 +341,25 @@ def train():
     logger.info("Output Name: %s", output_name)
     logger.info("Epochs: %d, Batch: %d, ImgSize: %d, Workers: %d", epochs, batch_size, image_size, workers)
     logger.info("Starting YOLO training...")
+    db_session.log("Dataset: %s | Type: %s | Epochs: %d, Batch: %d, ImgSize: %d, Workers: %d", data_yaml, dataset_type, epochs, batch_size, image_size, workers)
 
     model = YOLO("yolov8n.pt")
+
+    with open(data_yaml, "r") as f:
+        data_config = yaml.safe_load(f)
+    num_classes = data_config.get("nc", 1)
+
+    for cache_file in Path("dataset").rglob("*.cache"):
+        try:
+            cache_file.unlink()
+        except OSError:
+            pass
+    for cache_file in Path("dataset").rglob("*.npy"):
+        try:
+            cache_file.unlink()
+        except OSError:
+            pass
+    logger.info("Cleared label caches for fresh training")
 
     progress_file = Path("runs/train_progress.txt")
     progress_file.parent.mkdir(parents=True, exist_ok=True)
@@ -193,6 +372,9 @@ def train():
                 f.write(str(percent))
         except OSError:
             pass
+        db_session.progress(percent)
+        if current_epoch % 10 == 0 or current_epoch == epochs:
+            db_session.log("Epoch %d/%d completed (%d%%)", current_epoch, epochs, percent)
 
     model.add_callback("on_train_epoch_end", on_train_epoch_end)
 
@@ -236,23 +418,31 @@ def train():
 
     if best_model.exists():
         os.makedirs("backend/model", exist_ok=True)
-        shutil.copy(best_model, "backend/model/best.pt")
+        _safe_copy_file(best_model, "backend/model/best.pt")
 
         os.makedirs("exports", exist_ok=True)
-        shutil.copy(best_model, f"exports/{output_name}.pt")
+        _safe_copy_file(best_model, f"exports/{output_name}.pt")
         logger.info("Model saved: backend/model/best.pt and exports/%s.pt", output_name)
+        db_session.log("Model saved: backend/model/best.pt and exports/%s.pt", output_name)
+
+        _upload_to_r2(f"exports/{output_name}.pt", f"models/{output_name}.pt")
 
         try:
             logger.info("Exporting to ONNX...")
             model.export(format="onnx", imgsz=image_size)
             onnx_export = save_dir / "weights/best.onnx"
             if onnx_export.exists():
-                shutil.copy(onnx_export, f"exports/{output_name}.onnx")
+                _safe_copy_file(onnx_export, f"exports/{output_name}.onnx")
                 logger.info("ONNX exported: exports/%s.onnx", output_name)
+                _upload_to_r2(f"exports/{output_name}.onnx", f"models/{output_name}.onnx")
         except Exception as e:
             logger.warning("ONNX export failed: %s", e)
+        db_session.log("Training completed successfully")
+        db_session.complete("completed")
     else:
         logger.error("Training failed - best.pt not found at %s", best_model)
+        db_session.log("ERROR: Training failed - best.pt not found at %s", best_model)
+        db_session.complete("failed")
 
 
 if __name__ == "__main__":

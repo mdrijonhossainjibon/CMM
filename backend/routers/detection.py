@@ -21,7 +21,7 @@ async def detect_objects(
     model_type: str = Form("auto"),
 ):
     if not file.filename or not file.filename.lower().endswith(
-        (".jpg", ".jpeg", ".png", ".bmp", ".tiff")
+        (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".heic", ".heif")
     ):
         raise HTTPException(status_code=400, detail="Unsupported file format")
 
@@ -30,10 +30,14 @@ async def detect_objects(
         service = DetectionService(detector)
         image_data = await file.read()
         detected_objects = await service.detect(image_data, conf_threshold)
+        model_classes = list(detector.model.names.values()) if hasattr(detector.model, 'names') else []
         return DetectResponse(
             success=True,
             detected_objects=[DetectionObject(**obj) for obj in detected_objects],
             count=len(detected_objects),
+            model_name=detector.model_name,
+            model_type=model_type,
+            model_classes=model_classes,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")

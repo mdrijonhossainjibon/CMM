@@ -10,6 +10,17 @@ class Settings(BaseSettings):
     APP_VERSION: str = "3.0.0"
     DEBUG: bool = True
 
+    # MongoDB
+    MONGODB_URI: str = "mongodb://localhost:27017"
+    MONGODB_DB_NAME: str = "captchamaster"
+
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+
+    # Super Admin (auto-created on first run)
+    SUPER_ADMIN_USERNAME: str = "superadmin"
+    SUPER_ADMIN_PASSWORD: str = "superadmin123"
+
     # JWT
     SECRET_KEY: str = "change-this-to-a-random-secret-key-in-production"
     ALGORITHM: str = "HS256"
@@ -46,9 +57,17 @@ class Settings(BaseSettings):
         "custom": {"name": "Custom Model", "output_prefix": "custom"},
     }
 
+    # Cloudflare R2 Storage
+    R2_ENABLED: bool = False
+    R2_ENDPOINT_URL: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = "captchamaster"
+    R2_REGION: str = "auto"
+
     # Security
     RATE_LIMIT_PER_MINUTE: int = 300
-    ALLOWED_UPLOAD_EXTENSIONS: List[str] = [".jpg", ".jpeg", ".png", ".webp"]
+    ALLOWED_UPLOAD_EXTENSIONS: List[str] = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"]
     MAX_UPLOAD_SIZE_MB: int = 50
 
     class Config:

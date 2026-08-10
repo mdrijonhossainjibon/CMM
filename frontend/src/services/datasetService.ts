@@ -30,3 +30,18 @@ export async function deleteDataset(type: string) {
   });
   return res.data;
 }
+
+export async function deleteDatasetImage(type: string, filename: string) {
+  const res = await client.delete(`/datasets/${type}/image`, {
+    params: { file: filename },
+    timeout: 10000,
+  });
+  return res.data;
+}
+
+export async function deleteDatasetClass(type: string, className: string) {
+  const res = await client.delete(`/datasets/${type}/class/${encodeURIComponent(className)}`, {
+    timeout: 10000,
+  });
+  return res.data;
+}

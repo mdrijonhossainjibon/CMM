@@ -39,7 +39,7 @@ class CaptchaDetector:
         """Reload the model from disk."""
         try:
             self.model = YOLO(self.model_path)
-            self.model_name = "Custom YOLOv8"
+            self.model_name = os.path.basename(self.model_path)
             logger.info("Successfully loaded model from %s", self.model_path)
         except Exception as e:
             logger.warning("Failed to load custom model from %s: %s", self.model_path, e)

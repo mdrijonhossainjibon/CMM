@@ -6,6 +6,7 @@ class TrainingStartResponse(BaseModel):
     success: bool
     message: Optional[str] = None
     error: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class TrainingRequest(BaseModel):

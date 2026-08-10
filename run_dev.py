@@ -19,11 +19,14 @@ HOST = "0.0.0.0"
 PORT = 8000
 WATCH_DIR = Path(__file__).parent / "backend"
 MODULE = "backend.main:app"
+PROJECT_ROOT = Path(__file__).parent
+VENV_PYTHON = PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
 
 
 def start_server() -> subprocess.Popen:
+    python_exe = str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
     cmd = [
-        sys.executable, "-m", "uvicorn", MODULE,
+        python_exe, "-m", "uvicorn", MODULE,
         "--host", HOST,
         "--port", str(PORT),
         "--no-access-log",

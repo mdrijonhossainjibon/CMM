@@ -5,7 +5,7 @@ import StatCard from '../components/common/StatCard';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { Icon } from '../components/common/Icons';
-import { getUsers, getStats, getGpuStatus, getStorageStatus } from '../services/adminService';
+import { getUsers, createAdmin, deleteAdmin, getStats, getGpuStatus, getStorageStatus } from '../services/adminService';
 import type { AdminUserInfo, AdminStatsResponse, AdminGpuResponse, AdminStorageResponse } from '../types';
 
 function safePercent(value: number, total: number): string {
@@ -167,6 +167,10 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'gpu' | 'storage'>('overview');
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [toast, setToast] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -209,6 +213,36 @@ export default function Admin() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const handleCreateAdmin = async () => {
+    if (!newUsername.trim() || !newPassword) return;
+    setCreating(true);
+    try {
+      await createAdmin(newUsername.trim(), newPassword);
+      setNewUsername('');
+      setNewPassword('');
+      setToast(`Admin "${newUsername.trim()}" created!`);
+      setTimeout(() => setToast(''), 3000);
+      fetchData();
+    } catch (err: unknown) {
+      setToast(err instanceof Error ? err.message : 'Failed to create admin');
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteAdmin = async (username: string) => {
+    try {
+      await deleteAdmin(username);
+      setToast(`User "${username}" deleted`);
+      setTimeout(() => setToast(''), 3000);
+      fetchData();
+    } catch (err: unknown) {
+      setToast(err instanceof Error ? err.message : 'Failed to delete user');
+      setTimeout(() => setToast(''), 3000);
+    }
+  };
+
   if (loading) return <LoadingSpinner text="Loading admin data..." />;
   if (error) return <ErrorMessage message={error} onRetry={fetchData} />;
 
@@ -244,37 +278,70 @@ export default function Admin() {
       )}
 
       {activeTab === 'users' && (
-        <GlassPanel>
-          <h3 className="text-sm font-medium text-dark-heading mb-4">User Management</h3>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-dark-text border-b border-dark-border">
-                <th className="pb-2 font-medium">Username</th>
-                <th className="pb-2 font-medium">Role</th>
-              </tr>
-            </thead>
-            <tbody className="text-dark-text">
+        <div className="space-y-4">
+          <GlassPanel>
+            <h3 className="text-sm font-medium text-dark-heading mb-4">Create Admin User</h3>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                placeholder="Username"
+                className="flex-1 px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
+              />
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Password"
+                className="flex-1 px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
+              />
+              <button
+                onClick={handleCreateAdmin}
+                disabled={creating || !newUsername.trim() || !newPassword}
+                className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {creating ? 'Creating...' : 'Create Admin'}
+              </button>
+            </div>
+          </GlassPanel>
+
+          <GlassPanel>
+            <h3 className="text-sm font-medium text-dark-heading mb-4">Manage Users ({users.length})</h3>
+            <div className="space-y-1">
               {users.map((user) => (
-                <tr key={user.username} className="border-b border-dark-border/50">
-                  <td className="py-2 flex items-center gap-2">
-                    <Icon name="users" className="w-4 h-4 text-dark-text" />
-                    {user.username}
-                  </td>
-                  <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${
-                      user.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-dark-surface text-dark-text'
-                    }`}>
-                      {user.role}
-                    </span>
-                  </td>
-                </tr>
+                <div key={user.username} className="flex items-center justify-between p-3 rounded-lg bg-dark-surface border border-dark-border">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold uppercase shrink-0">
+                      {user.username.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-dark-heading truncate">{user.username}</p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        user.role === 'super_admin' ? 'bg-amber-500/10 text-amber-400' :
+                        user.role === 'admin' ? 'bg-primary/10 text-primary' :
+                        'bg-dark-border text-dark-text'
+                      }`}>
+                        {user.role}
+                      </span>
+                    </div>
+                  </div>
+                  {user.role !== 'super_admin' && (
+                    <button
+                      onClick={() => handleDeleteAdmin(user.username)}
+                      className="px-3 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               ))}
               {users.length === 0 && (
-                <tr><td colSpan={2} className="py-4 text-center text-dark-text/40">No users found</td></tr>
+                <p className="text-center text-dark-text/40 py-6 text-sm">No users found</p>
               )}
-            </tbody>
-          </table>
-        </GlassPanel>
+            </div>
+          </GlassPanel>
+        </div>
       )}
 
       {activeTab === 'gpu' && gpu && <GpuCpuPanel data={gpu} />}

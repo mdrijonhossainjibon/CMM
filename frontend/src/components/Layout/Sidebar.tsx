@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { Image } from 'antd';
 import { Icon } from '../common/Icons';
 import type { IconName } from '../../types';
 
@@ -67,9 +68,14 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         style={{ background: 'var(--color-dark-sidebar, #121218)' }}
       >
         <div className="flex items-center h-14 lg:h-16 px-3 lg:px-4 border-b border-dark-border gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-bold shrink-0">
-            CM
-          </div>
+          <Image
+            src="/logo.png"
+            alt="CaptchaMaster"
+            preview={false}
+            className="rounded-lg object-contain shrink-0"
+            width={32}
+            height={32}
+          />
           {!collapsed && (
             <span className="text-sm font-semibold text-dark-heading truncate">
               CM Trainer

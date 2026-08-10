@@ -2,12 +2,28 @@ import os
 import time
 import hashlib
 import base64
+import asyncio
+import logging
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
 from backend.schemas.detection import ImageRequest
 from backend.schemas.training import TrainingStartResponse, TrainingStatusResponse, TrainingRequest
 from backend.services.training_service import TrainingService
 from backend.core.config import settings
+
+logger = logging.getLogger("captchamaster.training_router")
+
+
+async def _auto_sync_training_data():
+    """Background task: push training_data/ to R2 if configured. Never blocks uploads."""
+    try:
+        from backend.services.r2_service import r2_service
+        if not await r2_service._is_configured():
+            return
+        result = await r2_service.upload_directory(settings.TRAINING_DATA_DIR, "training-data")
+        logger.info("R2 auto-sync training-data: %s", result)
+    except Exception as e:
+        logger.warning("R2 auto-sync failed: %s", e)
 from backend.utils.validators import validate_image_file, validate_file_size
 
 router = APIRouter(prefix="/api", tags=["Training"])
@@ -31,6 +47,7 @@ async def save_training_data(
         filepath = os.path.join(settings.TRAINING_DATA_DIR, filename)
         with open(filepath, "wb") as f:
             f.write(content)
+        asyncio.create_task(_auto_sync_training_data())
         return {"success": True, "saved_as": filename}
     except HTTPException:
         raise
@@ -51,12 +68,12 @@ async def upload_training_data_batch(
 
     saved = []
     errors = []
-    for f in files:
+    base_ts = int(time.time() * 1000)
+    for idx, f in enumerate(files):
         try:
             validate_image_file(f)
             ext = os.path.splitext(f.filename or "image.jpg")[1] or ".jpg"
-            timestamp = int(time.time() * 1000)
-            filename = f"{safe_class}_{timestamp}{ext}"
+            filename = f"{safe_class}_{base_ts}_{idx}{ext}"
             filepath = os.path.join(settings.TRAINING_DATA_DIR, filename)
             content = await f.read()
             validate_file_size(content)
@@ -67,6 +84,9 @@ async def upload_training_data_batch(
             raise
         except Exception as e:
             errors.append(f"{f.filename}: {str(e)}")
+
+    if saved:
+        asyncio.create_task(_auto_sync_training_data())
 
     return {
         "success": len(errors) == 0,
@@ -121,6 +141,7 @@ async def delete_training_image(filename: str):
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="File not found")
     os.remove(filepath)
+    asyncio.create_task(_auto_sync_training_data())
     return {"success": True, "deleted": filename}
 
 
@@ -136,6 +157,8 @@ async def delete_training_class(class_name: str):
             os.remove(os.path.join(data_dir, f))
             deleted += 1
 
+    if deleted:
+        asyncio.create_task(_auto_sync_training_data())
     return {"success": True, "deleted_count": deleted, "class": class_name}
 
 
@@ -158,6 +181,7 @@ async def rename_training_image(filename: str, new_class: str):
         raise HTTPException(status_code=409, detail=f"File '{new_filename}' already exists")
 
     os.rename(old_path, new_path)
+    asyncio.create_task(_auto_sync_training_data())
     return {"success": True, "old_name": filename, "new_name": new_filename, "class": safe_new}
 
 
@@ -219,6 +243,20 @@ async def start_training(request: TrainingRequest):
         )
 
     try:
+        session_id = None
+        try:
+            from backend.services.log_service import log_service
+            session_id = await log_service.create_session(
+                training_type=request.training_type,
+                epochs=request.epochs,
+                batch_size=request.batch_size,
+                image_size=request.image_size,
+                workers=request.workers,
+                selected_classes=request.selected_classes,
+            )
+        except Exception:
+            session_id = None
+
         _training_service.start_training(
             training_type=request.training_type,
             epochs=request.epochs,
@@ -227,9 +265,11 @@ async def start_training(request: TrainingRequest):
             workers=request.workers,
             optimize=request.optimize,
             selected_classes=request.selected_classes,
+            session_id=session_id,
         )
+        asyncio.create_task(_auto_sync_training_data())
         return TrainingStartResponse(
-            success=True, message=f"Training started for {request.training_type}"
+            success=True, message=f"Training started for {request.training_type}", session_id=session_id
         )
     except Exception as e:
         return TrainingStartResponse(success=False, error=str(e))

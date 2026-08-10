@@ -60,6 +60,7 @@ class TrainingService:
         self._batch_size: Optional[int] = None
         self._workers: Optional[int] = None
         self._vram_estimate_mb: int = 0
+        self._session_id: Optional[str] = None
 
     def start_training(
         self,
@@ -70,6 +71,7 @@ class TrainingService:
         workers: int = 8,
         optimize: bool = True,
         selected_classes: list[str] | None = None,
+        session_id: str | None = None,
     ) -> None:
         self._hardware = detect_hardware()
 
@@ -81,6 +83,7 @@ class TrainingService:
         self._batch_size = batch_size
         self._workers = workers
         self._vram_estimate_mb = estimate_vram_mb(batch_size, image_size)
+        self._session_id = session_id
 
         script_path = settings.TRAINING_SCRIPT_PATH
         env = os.environ.copy()
@@ -91,6 +94,8 @@ class TrainingService:
         env["TRAIN_WORKERS"] = str(workers)
         if selected_classes:
             env["TRAIN_SELECTED_CLASSES"] = ",".join(selected_classes)
+        if session_id:
+            env["TRAIN_SESSION_ID"] = session_id
 
         if self._hardware["device_type"] == "gpu":
             env["TRAINING_DEVICE"] = "0"
@@ -100,6 +105,9 @@ class TrainingService:
         self._process = subprocess.Popen([sys.executable, script_path], env=env)
         self._current_type = training_type
         self._started_at = time_module.time()
+
+    def get_session_id(self) -> Optional[str]:
+        return self._session_id
 
     def is_running(self) -> bool:
         if self._process is None:
