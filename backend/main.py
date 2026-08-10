@@ -11,6 +11,7 @@ from backend.db.connection import connect_db, close_db
 from backend.services.user_service import UserService
 from backend.routers import auth, detection, training, models, datasets, logs, exports, websocket, admin, r2
 from backend.routers import settings as settings_router
+from backend.routers import migrate
 
 logger = logging.getLogger("captchamaster")
 
@@ -62,6 +63,7 @@ app.include_router(websocket.router)
 app.include_router(admin.router)
 app.include_router(r2.router)
 app.include_router(settings_router.router)
+app.include_router(migrate.router)
 
 
 @app.exception_handler(404)

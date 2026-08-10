@@ -11,6 +11,7 @@ import Models from './pages/Models';
 import Analytics from './pages/Analytics';
 import Datasets from './pages/Datasets';
 import Logs from './pages/Logs';
+import Migrate from './pages/Migrate';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
@@ -48,6 +49,7 @@ function AppRoutes() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="datasets" element={<Datasets />} />
           <Route path="logs" element={<Logs />} />
+          <Route path="migrate" element={<Migrate />} />
           <Route path="settings" element={<Settings />} />
           <Route path="admin" element={<Admin />} />
         </Route>
