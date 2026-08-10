@@ -195,24 +195,11 @@ print("Keep-alive started. Notebook connected thakbe.")
 
 ## 9. Cloudflare Tunnel — Colab Server Public URL
 
-Colab e chola backend server ta localhost e thake — browser/phone theke access korte Cloudflare Tunnel lagbe. Free, no credit card.
+Colab e chola backend server ta localhost e thake — browser/phone theke access korte Cloudflare Tunnel lagbe. **Kono account/token/credit card lage na** (quick tunnel option e).
 
-### Step 1 — Cloudflare Account + Tunnel
+### Option A — Quick Tunnel (NO TOKEN, recommended)
 
-1. [dash.cloudflare.com](https://dash.cloudflare.com) → login (free account)
-2. Left sidebar → **Zero Trust** (or `one.dash.cloudflare.com`)
-3. **Networks** → **Tunnels** → **Create a tunnel**
-4. Tunnel type → **Cloudflared** → Next
-5. Tunnel name → e.g. `colab-backend` → **Save tunnel**
-6. Install page e **Windows** select korle token dekhabe:
-
-```
-cloudflared tunnel --url http://localhost:8000 --token eyJ...abc
-```
-
-> **Token ta copy kore rakhen** (secret) — Colab e ei token diye tunnel cholbe.
-
-### Step 2 — Colab e cloudflared install + server run
+Colab e cell gulor shudhu run korlei hoy — kono Cloudflare account lagbe na.
 
 ```python
 # Cell 9 — Install cloudflared
@@ -240,7 +227,68 @@ print("Server starting on http://localhost:8000 ...")
 
 > Colab runtime e **Background Execution** on thakle (Runtime → Change runtime type → Background execution) server puro session thakbe.
 
-### Step 3 — Cloudflare Tunnel run (with token)
+```python
+# Cell 11 — Tunnel run (NO TOKEN — just --url)
+import subprocess, threading
+
+def run_tunnel():
+    subprocess.run(["cloudflared", "tunnel", "--url", "http://localhost:8000"])
+
+threading.Thread(target=run_tunnel, daemon=True).start()
+time.sleep(15)
+print("Tunnel starting... log e https://*.trycloudflare.com URL khujun")
+```
+
+> **Output e `https://<random>.trycloudflare.com` dekhabe** — eta apnar public URL. Browser e open korle backend response ashbe.
+
+### Option B — Cloudflare Account Tunnel (custom URL, optional)
+
+Permanent custom URL chaile (e.g. `https://backend.rakirakib.com`) token flow use korun. Free account thakle e.
+
+#### Step 1 — Tunnel Create
+
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → login (free account)
+2. Left sidebar → **Zero Trust** (or `one.dash.cloudflare.com`)
+3. **Networks** → **Tunnels** → **Create a tunnel**
+4. Tunnel type → **Cloudflared** → Next
+5. Tunnel name → e.g. `colab-backend` → **Save tunnel**
+6. Install page e **Windows** select korle token dekhabe:
+
+```
+cloudflared tunnel --url http://localhost:8000 --token eyJ...abc
+```
+
+> **Token ta copy kore rakhen** (secret) — Colab e ei token diye tunnel cholbe.
+
+#### Step 2 — Colab e cloudflared install + server run
+
+```python
+# Cell 9 — Install cloudflared
+!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+!chmod +x cloudflared-linux-amd64
+!mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+!cloudflared --version
+```
+
+```python
+# Cell 10 — Start backend server (background)
+!pip install -q "uvicorn[standard]"  # already installed
+import subprocess, threading, time
+
+def run_server():
+    subprocess.run([
+        "python", "backend/main.py"
+    ], cwd="/content/CMM")
+
+thread = threading.Thread(target=run_server, daemon=True)
+thread.start()
+time.sleep(8)
+print("Server starting on http://localhost:8000 ...")
+```
+
+> Colab runtime e **Background Execution** on thakle (Runtime → Change runtime type → Background execution) server puro session thakbe.
+
+#### Step 3 — Cloudflare Tunnel run (with token)
 
 ```python
 # Cell 11 — Tunnel (server 8000 → public URL)
@@ -259,14 +307,6 @@ print("Tunnel starting... check below logs for trycloudflare URL")
 ```
 
 > **Output e `https://<random>.trycloudflare.com` dekhabe** — eta apnar public URL.
->
-> Token use na korle quick tunnel:
-> ```python
-> # Token chara (quick, temporary URL)
-> def run_tunnel():
->     subprocess.run(["cloudflared", "tunnel", "--url", "http://localhost:8000"])
-> ```
-> Output e `https://<random>.trycloudflare.com` URL paban — temporary, browser e open hobe.
 
 ### Step 4 — App e Backend URL Set
 
@@ -299,7 +339,7 @@ print("Tunnel stopped")
 | MongoDB | Atlas recommended (0.0.0.0/0 network) |
 | Data sync | R2 (`training-data/` prefix) |
 | Model output | R2 (`models/` prefix) → `/api/r2/pull/models` |
-| Public URL | Cloudflare Tunnel → `https://<random>.trycloudflare.com` |
+| Public URL | Cloudflare Tunnel → `https://<random>.trycloudflare.com` (no token needed) |
 | Server port | 8000 (Colab) → tunnel → `/api` auto-add |
 | Session limit | ~12 hr (free) |
 
