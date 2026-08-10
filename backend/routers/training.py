@@ -10,6 +10,13 @@ from backend.schemas.detection import ImageRequest
 from backend.schemas.training import TrainingStartResponse, TrainingStatusResponse, TrainingRequest
 from backend.services.training_service import TrainingService
 from backend.core.config import settings
+from backend.services.class_manifest import (
+    add_entries,
+    remove_entries,
+    remove_by_class,
+    rename_entry,
+    get_class,
+)
 
 logger = logging.getLogger("captchamaster.training_router")
 
@@ -48,6 +55,7 @@ async def save_training_data(
         filepath = os.path.join(settings.TRAINING_DATA_DIR, filename)
         with open(filepath, "wb") as f:
             f.write(content)
+        add_entries(settings.TRAINING_DATA_DIR, {filename: label.strip().lower()})
         asyncio.create_task(_auto_sync_training_data())
         return {"success": True, "saved_as": filename}
     except HTTPException:
@@ -69,6 +77,7 @@ async def upload_training_data_batch(
 
     saved = []
     errors = []
+    entries = {}
     base_ts = int(time.time() * 1000)
     for idx, f in enumerate(files):
         try:
@@ -81,10 +90,14 @@ async def upload_training_data_batch(
             with open(filepath, "wb") as out:
                 out.write(content)
             saved.append(filename)
+            entries[filename] = class_name.strip().lower()
         except HTTPException:
             raise
         except Exception as e:
             errors.append(f"{f.filename}: {str(e)}")
+
+    if entries:
+        add_entries(settings.TRAINING_DATA_DIR, entries)
 
     if saved:
         asyncio.create_task(_auto_sync_training_data())
@@ -109,7 +122,7 @@ async def list_training_classes():
         full = os.path.join(data_dir, f)
         if not os.path.isfile(full):
             continue
-        cls = f.split("_")[0]
+        cls = get_class(f, data_dir, f.split("_")[0])
         if cls not in classes:
             classes[cls] = 0
         classes[cls] += 1
@@ -130,11 +143,12 @@ async def list_training_images(request: Request, class_name: str = ""):
         full = os.path.join(data_dir, f)
         if not os.path.isfile(full):
             continue
-        if class_name and not f.startswith(class_name.lower()):
+        cls = get_class(f, data_dir, f.split("_")[0])
+        if class_name and cls != class_name.lower():
             continue
         images.append({
             "filename": f,
-            "class": f.split("_")[0],
+            "class": cls,
             "url": f"{base}/api/datasets/train?file={f}",
         })
 
@@ -167,6 +181,7 @@ async def delete_training_image(filename: str):
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="File not found")
     os.remove(filepath)
+    remove_entries(settings.TRAINING_DATA_DIR, [filename])
     await _r2_delete_object(f"training-data/{filename}")
     return {"success": True, "deleted": filename}
 
@@ -177,15 +192,21 @@ async def delete_training_class(class_name: str):
     if not os.path.exists(data_dir):
         raise HTTPException(status_code=404, detail="Training data directory not found")
 
+    target = class_name.strip().lower()
     deleted = 0
     removed = []
     for f in os.listdir(data_dir):
-        if f.startswith(class_name.lower()):
-            os.remove(os.path.join(data_dir, f))
+        full = os.path.join(data_dir, f)
+        if not os.path.isfile(full):
+            continue
+        cls = get_class(f, data_dir, f.split("_")[0])
+        if cls == target:
+            os.remove(full)
             removed.append(f)
             deleted += 1
 
     if removed:
+        remove_by_class(data_dir, target)
         try:
             from backend.services.r2_service import r2_service
             if await r2_service._is_configured():
@@ -207,14 +228,22 @@ async def rename_training_image(filename: str, new_class: str):
     if not os.path.exists(old_path):
         raise HTTPException(status_code=404, detail="File not found")
 
-    parts = filename.split("_", 1)
-    new_filename = f"{safe_new}_{parts[1]}" if len(parts) > 1 else f"{safe_new}_{filename}"
+    # Original class manifest theke nibo, filename split na
+    import re
+    # Extract suffix like _1786..._0.jpg (base_ts_idx.ext) from filename
+    m = re.search(r"_(\d{13}_\d+)(\.[A-Za-z0-9]+)$", filename)
+    if m:
+        suffix = f"_{m.group(1)}{m.group(2)}"
+    else:
+        suffix = os.path.splitext(filename)[1] or ".jpg"
+    new_filename = f"{safe_new}{suffix}"
     new_path = os.path.join(data_dir, new_filename)
 
     if os.path.exists(new_path):
         raise HTTPException(status_code=409, detail=f"File '{new_filename}' already exists")
 
     os.rename(old_path, new_path)
+    rename_entry(data_dir, filename, new_filename, safe_new)
     # R2 backup update: old delete + new upload (ekbar kore)
     await _r2_delete_object(f"training-data/{filename}")
     await _r2_upload_file(new_path, f"training-data/{new_filename}")

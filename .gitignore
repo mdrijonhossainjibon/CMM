@@ -7,7 +7,6 @@ data.yaml
 
 # Models
 *.pt
-!backend/model/*.pt
 !yolov8n.pt
 
 # Cache files

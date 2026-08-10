@@ -169,6 +169,20 @@ def _get_r2_config_from_db() -> dict | None:
         return None
 
 
+def _resolve_class(filename: str) -> str:
+    """Resolve class name from manifest first, fallback to filename split."""
+    try:
+        import json
+        manifest = Path("training_data") / "classes.json"
+        if manifest.exists():
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            if filename in data:
+                return data[filename]
+    except Exception:
+        pass
+    return filename.split("_")[0]
+
+
 def prepare_yolo_data(filter_classes=None):
     """Prepare YOLO dataset from training_data/ directory.
     If filter_classes is provided, only include images from those classes.
@@ -189,14 +203,14 @@ def prepare_yolo_data(filter_classes=None):
     if filter_classes:
         filter_set = set(c.strip().lower() for c in filter_classes if c.strip())
         if filter_set:
-            images = [img for img in images if img.name.split('_')[0].lower() in filter_set]
+            images = [img for img in images if _resolve_class(img.name).lower() in filter_set]
             logger.info("Filtered to classes: %s — %d images", filter_classes, len(images))
 
     if not images:
         logger.error("No images found in training_data/")
         return None
 
-    classes = sorted(list(set([img.name.split('_')[0] for img in images])))
+    classes = sorted(list(set([_resolve_class(img.name) for img in images])))
     class_to_id = {cls: i for i, cls in enumerate(classes)}
     logger.info("Found classes: %s", classes)
 
@@ -210,7 +224,7 @@ def prepare_yolo_data(filter_classes=None):
 
     def process_set(img_list, target_path):
         for img_path in img_list:
-            cls_name = img_path.name.split('_')[0]
+            cls_name = _resolve_class(img_path.name)
             cls_id = class_to_id[cls_name]
             shutil.copy(img_path, target_path / "images" / img_path.name)
             label_file = target_path / "labels" / f"{img_path.stem}.txt"

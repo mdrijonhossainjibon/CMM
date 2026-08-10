@@ -15,7 +15,15 @@ type Tab = 'train' | 'val';
 
 function parseClass(filename: string): string {
   if (!filename.includes('_')) return 'unknown';
-  return filename.split('_')[0];
+  // Class e underscore thakle: timestamp (13 digit) ar idx er age ja sob class
+  // filename: cow_and_castle_1786397056329_0.jpg
+  const parts = filename.split('_');
+  for (let i = 0; i < parts.length; i++) {
+    if (/^\d{10,}$/.test(parts[i])) {
+      return parts.slice(0, i).join('_') || 'unknown';
+    }
+  }
+  return parts[0];
 }
 
 export default function Datasets() {

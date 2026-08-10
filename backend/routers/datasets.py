@@ -12,10 +12,14 @@ router = APIRouter(prefix="/api/datasets", tags=["Datasets"])
 def _scan_images(directory: str) -> list[dict]:
     if not os.path.exists(directory) or not os.path.isdir(directory):
         return []
+
+    from backend.services.class_manifest import load_manifest
+    manifest = load_manifest(settings.TRAINING_DATA_DIR)
+
     result = []
     for f in sorted(os.listdir(directory)):
         if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-            class_name = f.split("_")[0] if "_" in f else "unknown"
+            class_name = manifest.get(f, f.split("_")[0] if "_" in f else "unknown")
             result.append({"filename": f, "class": class_name})
     return result
 

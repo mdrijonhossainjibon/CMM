@@ -225,7 +225,16 @@ export default function DataUpload() {
 
   const startRename = (filename: string) => {
     setRenameTarget(filename);
-    setRenameClass(filename.split('_')[0] || '');
+    // Class e underscore thakle timestamp (13 digit) er age sob class
+    const parts = filename.split('_');
+    let cls = parts[0] || '';
+    for (let i = 0; i < parts.length; i++) {
+      if (/^\d{10,}$/.test(parts[i])) {
+        cls = parts.slice(0, i).join('_') || '';
+        break;
+      }
+    }
+    setRenameClass(cls);
   };
 
   return (
