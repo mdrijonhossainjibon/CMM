@@ -53,7 +53,12 @@ export function updateBaseURL(url: string) {
 export function getAssetUrl(path: string): string {
   const base = (client.defaults.baseURL || '').replace(/\/+$/, '');
   if (!base) return path;
-  return `${base}/${path.replace(/^\/+/, '')}`;
+  let clean = path.replace(/^\/+/, '');
+  // base e /api thakle path er api/ prefix duplicate korbe na
+  if (base.endsWith('/api') && clean.startsWith('api/')) {
+    clean = clean.slice(4);
+  }
+  return `${base}/${clean}`;
 }
 
 export function getWsBaseURL(): string {
