@@ -5,7 +5,7 @@ import ErrorBoundary from './components/common/ErrorBoundary'
 import './index.css'
 import App from './App'
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '1032968355666-im6f83ncms8vii8u1fu0rfe9bjo8phit.apps.googleusercontent.com'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

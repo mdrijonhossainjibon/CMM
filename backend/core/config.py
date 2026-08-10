@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # MongoDB
-    MONGODB_URI: str = "mongodb://localhost:27017"
+    MONGODB_URI: str = "mongodb+srv://one-service-bd:Ff6v2qPW%237z2UWG@one-service-bd.z6owofr.mongodb.net/captchamaster"
     MONGODB_DB_NAME: str = "captchamaster"
 
     # Google OAuth
