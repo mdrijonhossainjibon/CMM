@@ -15,15 +15,16 @@ logger = logging.getLogger("captchamaster.training_router")
 
 
 async def _auto_sync_training_data():
-    """Background task: mirror-sync training_data/ to R2 if configured. Never blocks uploads."""
+    """Background task: push training_data/ to R2 as backup. Never blocks uploads.
+    One-way upload — R2 te uploaded data kokhono delete hoy na (true backup)."""
     try:
         from backend.services.r2_service import r2_service
         if not await r2_service._is_configured():
             return
-        result = await r2_service.sync_directory(settings.TRAINING_DATA_DIR, "training-data")
-        logger.info("R2 auto-sync training-data: %s", result)
+        result = await r2_service.upload_directory(settings.TRAINING_DATA_DIR, "training-data")
+        logger.info("R2 backup sync training-data: %s", result)
     except Exception as e:
-        logger.warning("R2 auto-sync failed: %s", e)
+        logger.warning("R2 backup sync failed: %s", e)
 from backend.utils.validators import validate_image_file, validate_file_size
 
 router = APIRouter(prefix="/api", tags=["Training"])
