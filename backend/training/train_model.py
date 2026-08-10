@@ -392,6 +392,7 @@ def train():
             device=device,
             amp=True,
             workers=workers,
+            cache=os.environ.get("TRAIN_CACHE", "ram"),
             project="runs/detect",
             name=output_name,
             exist_ok=True,

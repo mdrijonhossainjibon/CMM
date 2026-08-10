@@ -205,6 +205,20 @@ drive.mount('/content/drive')
 
 > Fast/quick test: `!TRAIN_EPOCHS=50 TRAIN_BATCH_SIZE=32 python backend/training/train_model.py`
 
+### ⚡ Max Speed Options
+
+| Setting | Command | Speed gain |
+|---|---|---|
+| **RAM cache** (default) | `python backend/training/train_model.py` | ~2-3x (image ekbar RAM e load) |
+| **Boro batch** | `!TRAIN_BATCH_SIZE=64 python backend/training/train_model.py` | ~2x |
+| **Choto image** | `!TRAIN_IMAGE_SIZE=480 python backend/training/train_model.py` | ~1.5x |
+| **Kom epoch** | `!TRAIN_EPOCHS=40 python backend/training/train_model.py` | epoch onusare |
+| **Sob ek sathe** | `!TRAIN_EPOCHS=40 TRAIN_BATCH_SIZE=64 TRAIN_IMAGE_SIZE=480 python backend/training/train_model.py` | **~6-8x** |
+
+> **Cache:** training ekbar image RAM e load kore — prottek epoch disk read kore na. Boro dataset (1000+) hole `TRAIN_CACHE=disk` use korun (RAM bachabe, ektu slow).
+>
+> **1000 img/1 min:** Colab T4 e `batch=64, img=480, 1-2 epoch` diye ~1 min/epoch possible. Complete 100 epoch er jonno time = epochs × per-epoch time.
+
 ## Step 6 — Model Upload (R2 te)
 
 ```python
