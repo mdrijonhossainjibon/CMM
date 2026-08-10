@@ -16,9 +16,8 @@ Colab er free GPU te CaptchaMaster training chalano jay — local CPU te trainin
 !git clone https://github.com/mdrijonhossainjibon/CMM.git
 %cd /content/CMM
 
-# Cell 2 — Install Python deps
-!pip install -q ultralytics torch torchvision --index-url https://download.pytorch.org/whl/cu121
-!pip install -q opencv-python pillow numpy pyyaml boto3 pymongo
+# Cell 2 — Install Python deps (single line, no versions)
+!pip install -q fastapi "uvicorn[standard]" python-multipart python-dotenv pydantic pydantic-settings "python-jose[cryptography]" "passlib[bcrypt]" ultralytics opencv-python pillow numpy pi-heif watchfiles psutil motor pymongo google-auth boto3 websockets onnx onnxslim onnxruntime && pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cu121
 
 # Cell 3 — Check GPU
 import torch
