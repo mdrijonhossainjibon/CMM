@@ -50,6 +50,12 @@ export function updateBaseURL(url: string) {
   client.defaults.baseURL = url;
 }
 
+export function getAssetUrl(path: string): string {
+  const base = (client.defaults.baseURL || '').replace(/\/+$/, '');
+  if (!base) return path;
+  return `${base}/${path.replace(/^\/+/, '')}`;
+}
+
 export function getWsBaseURL(): string {
   const envWsUrl = import.meta.env.VITE_WS_URL;
   if (envWsUrl) return envWsUrl;

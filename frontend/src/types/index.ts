@@ -117,6 +117,7 @@ export interface TrainingClassesResponse {
 export interface TrainingImage {
   filename: string;
   class: string;
+  url?: string;
 }
 
 export interface TrainingImagesResponse {

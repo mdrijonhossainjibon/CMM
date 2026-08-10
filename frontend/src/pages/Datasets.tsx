@@ -6,6 +6,7 @@ import ErrorMessage from '../components/common/ErrorMessage';
 import EmptyState from '../components/common/EmptyState';
 import Modal from '../components/common/Modal';
 import { getTrainImages, getValImages, deleteDataset, deleteDatasetImage, deleteDatasetClass } from '../services/datasetService';
+import { getAssetUrl } from '../services/apiClient';
 import { Icon } from '../components/common/Icons';
 import type { DatasetImageResponse } from '../types';
 import toast from 'react-hot-toast';
@@ -225,7 +226,7 @@ export default function Datasets() {
                 className="aspect-square rounded-xl border border-dark-border overflow-hidden relative group"
               >
                 <img
-                  src={`/api/datasets/${imageDir}?file=${img}`}
+                  src={getAssetUrl(`api/datasets/${imageDir}?file=${img}`)}
                   alt={img}
                   className="w-full h-full object-cover"
                   onError={(e) => {

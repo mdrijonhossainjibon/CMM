@@ -4,7 +4,7 @@ import hashlib
 import base64
 import asyncio
 import logging
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 
 from backend.schemas.detection import ImageRequest
 from backend.schemas.training import TrainingStartResponse, TrainingStatusResponse, TrainingRequest
@@ -118,11 +118,12 @@ async def list_training_classes():
 
 
 @router.get("/training-data/images")
-async def list_training_images(class_name: str = ""):
+async def list_training_images(request: Request, class_name: str = ""):
     data_dir = settings.TRAINING_DATA_DIR
     if not os.path.exists(data_dir):
         return {"images": []}
 
+    base = str(request.base_url).rstrip("/")
     images = []
     for f in sorted(os.listdir(data_dir)):
         full = os.path.join(data_dir, f)
@@ -130,7 +131,11 @@ async def list_training_images(class_name: str = ""):
             continue
         if class_name and not f.startswith(class_name.lower()):
             continue
-        images.append({"filename": f, "class": f.split("_")[0]})
+        images.append({
+            "filename": f,
+            "class": f.split("_")[0],
+            "url": f"{base}/api/datasets/train?file={f}",
+        })
 
     return {"images": images}
 

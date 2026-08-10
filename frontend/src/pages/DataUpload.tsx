@@ -12,6 +12,7 @@ import {
   deleteTrainingClass,
   renameTrainingImage,
 } from '../services/trainingDataService';
+import { getAssetUrl } from '../services/apiClient';
 import type { TrainingClass, TrainingImage } from '../types';
 
 interface QueuedImage {
@@ -405,7 +406,7 @@ export default function DataUpload() {
                   className="relative group aspect-square rounded-xl overflow-hidden border border-dark-border hover:border-primary/40 transition-colors"
                 >
                   <img
-                    src={`/api/datasets/train?file=${img.filename}`}
+                    src={img.url || getAssetUrl(`api/datasets/train?file=${img.filename}`)}
                     alt={img.filename}
                     className="w-full h-full object-cover"
                   />
