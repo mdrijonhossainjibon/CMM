@@ -14,7 +14,6 @@ const navItems: { to: string; label: string; icon: IconName }[] = [
   { to: '/data-upload', label: 'Data Upload', icon: 'images' },
   { to: '/models', label: 'Models', icon: 'models' },
   { to: '/analytics', label: 'Analytics', icon: 'analytics' },
-  { to: '/datasets', label: 'Datasets', icon: 'datasets' },
   { to: '/logs', label: 'Logs', icon: 'logs' },
   { to: '/migrate', label: 'Data Transfer', icon: 'database' },
   { to: '/admin', label: 'Admin', icon: 'users' },
