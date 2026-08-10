@@ -210,36 +210,53 @@ Colab e cell gulor shudhu run korlei hoy — kono Cloudflare account lagbe na.
 ```
 
 ```python
-# Cell 10 — Start backend server (background)
-!pip install -q "uvicorn[standard]"  # already installed
-import subprocess, threading, time
+# Cell 10 — Server + Tunnel ek cell e (URL auto-print)
+import subprocess, threading, time, re
 
-def run_server():
-    subprocess.run([
-        "python", "backend/main.py"
-    ], cwd="/content/CMM")
-
-thread = threading.Thread(target=run_server, daemon=True)
-thread.start()
+# 1) Backend server start (background)
+subprocess.Popen(
+    ["python", "backend/main.py"],
+    cwd="/content/CMM",
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+)
 time.sleep(8)
-print("Server starting on http://localhost:8000 ...")
+print("✅ Server: http://localhost:8000")
+
+# 2) Cloudflare tunnel (no token) — log capture korbo
+log_file = "/content/tunnel.log"
+tunnel = subprocess.Popen(
+    ["cloudflared", "tunnel", "--url", "http://localhost:8000"],
+    stdout=open(log_file, "w"),
+    stderr=subprocess.STDOUT,
+)
+
+# 3) Log theke trycloudflare URL extract kore print
+url = None
+for _ in range(60):  # max 60s wait
+    time.sleep(1)
+    try:
+        with open(log_file) as f:
+            content = f.read()
+        m = re.search(r"https://[a-z0-9\-]+\.trycloudflare\.com", content)
+        if m:
+            url = m.group(0)
+            break
+    except Exception:
+        pass
+
+if url:
+    print("=" * 50)
+    print(f"🚀 BACKEND URL: {url}")
+    print("=" * 50)
+    print("App e ei URL diye connect korun (/api auto-add hoye jabe)")
+else:
+    print("Tunnel URL paoa jay ni — upore cloudflared log check korun")
 ```
 
+> **Eta e sob** — server + tunnel + URL print, ek cell e. Output e `BACKEND URL` line ta copy kore app e paste korlei connected.
+>
 > Colab runtime e **Background Execution** on thakle (Runtime → Change runtime type → Background execution) server puro session thakbe.
-
-```python
-# Cell 11 — Tunnel run (NO TOKEN — just --url)
-import subprocess, threading
-
-def run_tunnel():
-    subprocess.run(["cloudflared", "tunnel", "--url", "http://localhost:8000"])
-
-threading.Thread(target=run_tunnel, daemon=True).start()
-time.sleep(15)
-print("Tunnel starting... log e https://*.trycloudflare.com URL khujun")
-```
-
-> **Output e `https://<random>.trycloudflare.com` dekhabe** — eta apnar public URL. Browser e open korle backend response ashbe.
 
 ### Option B — Cloudflare Account Tunnel (custom URL, optional)
 
@@ -308,7 +325,7 @@ print("Tunnel starting... check below logs for trycloudflare URL")
 
 > **Output e `https://<random>.trycloudflare.com` dekhabe** — eta apnar public URL.
 
-### Step 4 — App e Backend URL Set
+### Step 4 — App e Backend URL Set (Option A ar B duitai)
 
 Colab theke public URL ashle:
 
@@ -321,10 +338,11 @@ Colab theke public URL ashle:
 ### Step 5 — Tunnel Stop / Cleanup
 
 ```python
-# Session sesh ba tunnel bandh korte:
+# Server o bandh korte:
 import subprocess
 subprocess.run(["pkill", "-f", "cloudflared"])
-print("Tunnel stopped")
+subprocess.run(["pkill", "-f", "backend/main.py"])
+print("Tunnel + server stopped")
 ```
 
 > **Important:** Colab session disconnect hole tunnel o bandh hoye jay — abar Notebook open kore tunnel cell run korte hobe. Free tunnel URL permanent na (trycloudflare random).
