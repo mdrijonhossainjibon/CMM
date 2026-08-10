@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import GlassPanel from '../components/common/GlassPanel';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -36,6 +36,62 @@ export default function Training() {
 
   const wsPath = status?.running ? '/ws/training/logs' : null;
   const { messages: wsMessages, isConnected: wsConnected } = useWebSocket(wsPath);
+
+  // --- Training estimate (live) ---
+  const estimate = useMemo(() => {
+    const isGpu = hardware?.device_type === 'gpu';
+    const selectedSet = new Set(config.selected_classes);
+    const useFilter = config.selected_classes.length > 0;
+    const usedImages = useFilter
+      ? trainingClasses
+          .filter((c) => selectedSet.has(c.name))
+          .reduce((sum, c) => sum + c.count, 0)
+      : totalTrainImages;
+
+    const epochs = config.epochs;
+    const batch = config.batch_size;
+    const img = config.image_size;
+
+    // Per-image-per-epoch seconds (batch 16, img 640 base)
+    const baseSec = isGpu ? 0.13 : 1.2;
+    // Batch scaling: boro batch = fast
+    const batchFactor = Math.pow(16 / batch, 0.5);
+    // Image size scaling: choto img = fast
+    const imgFactor = Math.pow(img / 640, 2);
+
+    const perImageSec = baseSec * batchFactor * imgFactor;
+    const totalSeconds = usedImages * epochs * perImageSec;
+    const totalMinutes = totalSeconds / 60;
+
+    // VRAM estimate (GB)
+    const vramGb = (batch * (img ** 2)) / (1024 * 1024 * 4000) + 0.8;
+
+    const fmtTime = (min: number) => {
+      if (min < 1) return `${Math.max(Math.round(min * 60), 1)} sec`;
+      if (min < 60) return `${Math.round(min)} min`;
+      const h = Math.floor(min / 60);
+      const m = Math.round(min % 60);
+      return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
+    };
+
+    const quality =
+      epochs <= 40 ? 'Basic (fast)' : epochs <= 100 ? 'Standard' : epochs <= 150 ? 'Good' : 'High (slow)';
+
+    return {
+      isGpu,
+      usedImages,
+      epochs,
+      batch,
+      img,
+      totalMinutes,
+      totalSeconds,
+      fmt: fmtTime(totalMinutes),
+      vramGb,
+      quality,
+      gpuName: hardware?.gpu_name || 'GPU',
+    };
+  }, [config, hardware, trainingClasses, totalTrainImages]);
+
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -376,6 +432,55 @@ export default function Training() {
             )}
           </button>
           {error && <p className="text-xs text-red-400">{error}</p>}
+        </div>
+      </GlassPanel>
+
+      {/* Training Estimate */}
+      <GlassPanel>
+        <h2 className="text-sm font-medium text-dark-heading mb-4 flex items-center gap-2">
+          <Icon name="clock" className="w-4 h-4 text-primary" />
+          Training Estimate
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="p-3 rounded-lg bg-dark-surface border border-dark-border">
+            <p className="text-[10px] text-dark-text/60 mb-1">Images</p>
+            <p className="text-lg font-semibold text-dark-heading">
+              {estimate.usedImages.toLocaleString()}
+            </p>
+            <p className="text-[10px] text-dark-text/40 mt-0.5">
+              {config.selected_classes.length > 0 ? `${config.selected_classes.length} class(es) filtered` : 'All classes'}
+            </p>
+          </div>
+          <div className="p-3 rounded-lg bg-dark-surface border border-dark-border">
+            <p className="text-[10px] text-dark-text/60 mb-1">Epochs</p>
+            <p className="text-lg font-semibold text-dark-heading">{estimate.epochs}</p>
+            <p className="text-[10px] text-dark-text/40 mt-0.5">{estimate.quality}</p>
+          </div>
+          <div className="p-3 rounded-lg bg-dark-surface border border-dark-border">
+            <p className="text-[10px] text-dark-text/60 mb-1">Device</p>
+            <p className="text-lg font-semibold text-dark-heading truncate">
+              {estimate.isGpu ? (estimate.gpuName || 'GPU').split(' ')[0] : 'CPU'}
+            </p>
+            <p className="text-[10px] text-dark-text/40 mt-0.5">
+              batch {estimate.batch} · img {estimate.img}
+            </p>
+          </div>
+          <div className="p-3 rounded-lg bg-dark-surface border border-dark-border">
+            <p className="text-[10px] text-dark-text/60 mb-1">Est. Time</p>
+            <p className="text-lg font-semibold text-primary">{estimate.fmt}</p>
+            <p className="text-[10px] text-dark-text/40 mt-0.5">~{Math.max(Math.round(estimate.totalSeconds), 1).toLocaleString()} sec</p>
+          </div>
+          <div className="p-3 rounded-lg bg-dark-surface border border-dark-border">
+            <p className="text-[10px] text-dark-text/60 mb-1">Est. VRAM</p>
+            <p className="text-lg font-semibold text-dark-heading">
+              {estimate.vramGb >= 1 ? `${estimate.vramGb.toFixed(1)} GB` : `${Math.round(estimate.vramGb * 1024)} MB`}
+            </p>
+            <p className={`text-[10px] mt-0.5 ${estimate.isGpu && estimate.vramGb > ((hardware?.gpu_vram_mb ?? 16000) / 1024) ? 'text-red-400' : 'text-dark-text/40'}`}>
+              {estimate.isGpu && estimate.vramGb > ((hardware?.gpu_vram_mb ?? 16000) / 1024)
+                ? 'OOM risk — batch koman!'
+                : estimate.isGpu ? `GPU ${((hardware?.gpu_vram_mb ?? 16000) / 1024).toFixed(0)}GB` : 'RAM use'}
+            </p>
+          </div>
         </div>
       </GlassPanel>
 
