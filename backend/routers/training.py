@@ -20,6 +20,12 @@ from backend.services.class_manifest import (
 
 logger = logging.getLogger("captchamaster.training_router")
 
+_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".bmp", ".tiff")
+
+
+def _is_image_file(filename: str) -> bool:
+    return os.path.splitext(filename)[1].lower() in _IMAGE_EXTS
+
 
 async def _auto_sync_training_data():
     """Background task: push training_data/ to R2 as backup. Never blocks uploads.
@@ -120,7 +126,7 @@ async def list_training_classes():
     classes = {}
     for f in os.listdir(data_dir):
         full = os.path.join(data_dir, f)
-        if not os.path.isfile(full):
+        if not os.path.isfile(full) or not _is_image_file(f):
             continue
         cls = get_class(f, data_dir, f.split("_")[0])
         if cls not in classes:
@@ -141,7 +147,7 @@ async def list_training_images(request: Request, class_name: str = ""):
     images = []
     for f in sorted(os.listdir(data_dir)):
         full = os.path.join(data_dir, f)
-        if not os.path.isfile(full):
+        if not os.path.isfile(full) or not _is_image_file(f):
             continue
         cls = get_class(f, data_dir, f.split("_")[0])
         if class_name and cls != class_name.lower():
