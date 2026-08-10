@@ -175,3 +175,40 @@ print("Keep-alive on")
 | MongoDB timeout | Atlas Network Access e `0.0.0.0/0` |
 | OOM (memory) | `TRAIN_BATCH_SIZE=16` diye train |
 | Session disconnect | Keep-alive cell run koren |
+
+---
+
+## 💻 Colab Terminal Commands (cell na, terminal)
+
+Notebook cell er bodole Colab **terminal** use korle:
+
+```bash
+# 1. Clone
+git clone https://github.com/mdrijonhossainjibon/CMM.git && cd CMM
+
+# 2. Install
+pip install ultralytics torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install fastapi "uvicorn[standard]" python-multipart python-dotenv pydantic pydantic-settings "python-jose[cryptography]" "passlib[bcrypt]" opencv-python pillow numpy pi-heif watchfiles psutil motor pymongo google-auth boto3 websockets onnx onnxslim onnxruntime
+
+# 3. GPU check
+python -c "import torch; print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO GPU')"
+
+# 4. MongoDB
+export MONGODB_URI="mongodb+srv://USER:PASSWORD@cluster.mongodb.net/captchamaster"
+export MONGODB_DB_NAME="captchamaster"
+
+# 5. Train
+python backend/training/train_model.py
+
+# 6. Fast test
+TRAIN_EPOCHS=50 TRAIN_BATCH_SIZE=32 python backend/training/train_model.py
+
+# 7. Server + Tunnel (public URL)
+wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x cloudflared-linux-amd64 && mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+nohup python backend/main.py > server.log 2>&1 &
+nohup cloudflared tunnel --url http://localhost:8000 > tunnel.log 2>&1 &
+sleep 15 && grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' tunnel.log | head -1
+```
+
+> Terminal e `nohup ... &` use kore background e chalano hoy — server + tunnel eko sathe chole.
