@@ -193,6 +193,102 @@ print("Keep-alive started. Notebook connected thakbe.")
 
 > Colab free tier e max ~12 hour continuous session thake. Beshi time lagle re-run korte hobe.
 
+## 9. Cloudflare Tunnel — Colab Server Public URL
+
+Colab e chola backend server ta localhost e thake — browser/phone theke access korte Cloudflare Tunnel lagbe. Free, no credit card.
+
+### Step 1 — Cloudflare Account + Tunnel
+
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → login (free account)
+2. Left sidebar → **Zero Trust** (or `one.dash.cloudflare.com`)
+3. **Networks** → **Tunnels** → **Create a tunnel**
+4. Tunnel type → **Cloudflared** → Next
+5. Tunnel name → e.g. `colab-backend` → **Save tunnel**
+6. Install page e **Windows** select korle token dekhabe:
+
+```
+cloudflared tunnel --url http://localhost:8000 --token eyJ...abc
+```
+
+> **Token ta copy kore rakhen** (secret) — Colab e ei token diye tunnel cholbe.
+
+### Step 2 — Colab e cloudflared install + server run
+
+```python
+# Cell 9 — Install cloudflared
+!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+!chmod +x cloudflared-linux-amd64
+!mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+!cloudflared --version
+```
+
+```python
+# Cell 10 — Start backend server (background)
+!pip install -q "uvicorn[standard]"  # already installed
+import subprocess, threading, time
+
+def run_server():
+    subprocess.run([
+        "python", "backend/main.py"
+    ], cwd="/content/CMM")
+
+thread = threading.Thread(target=run_server, daemon=True)
+thread.start()
+time.sleep(8)
+print("Server starting on http://localhost:8000 ...")
+```
+
+> Colab runtime e **Background Execution** on thakle (Runtime → Change runtime type → Background execution) server puro session thakbe.
+
+### Step 3 — Cloudflare Tunnel run (with token)
+
+```python
+# Cell 11 — Tunnel (server 8000 → public URL)
+import subprocess, threading
+
+def run_tunnel():
+    subprocess.run([
+        "cloudflared", "tunnel", "--url", "http://localhost:8000",
+        "--token", "eyJ...abc"   # <-- apnar token
+    ])
+
+thread = threading.Thread(target=run_tunnel, daemon=True)
+thread.start()
+time.sleep(15)
+print("Tunnel starting... check below logs for trycloudflare URL")
+```
+
+> **Output e `https://<random>.trycloudflare.com` dekhabe** — eta apnar public URL.
+>
+> Token use na korle quick tunnel:
+> ```python
+> # Token chara (quick, temporary URL)
+> def run_tunnel():
+>     subprocess.run(["cloudflared", "tunnel", "--url", "http://localhost:8000"])
+> ```
+> Output e `https://<random>.trycloudflare.com` URL paban — temporary, browser e open hobe.
+
+### Step 4 — App e Backend URL Set
+
+Colab theke public URL ashle:
+
+1. **App khulun** → header e URL button click → modal open
+2. URL likhun: `https://<random>.trycloudflare.com`  ← `/api` na likhlei auto-add hobe
+3. 600ms por auto-connect → app backend Colab theke cholbe
+
+> **CORS check:** Colab server e CORS already enable ache (frontend 5173/3000 theke). Phone/browser thekeo kaj korbe.
+
+### Step 5 — Tunnel Stop / Cleanup
+
+```python
+# Session sesh ba tunnel bandh korte:
+import subprocess
+subprocess.run(["pkill", "-f", "cloudflared"])
+print("Tunnel stopped")
+```
+
+> **Important:** Colab session disconnect hole tunnel o bandh hoye jay — abar Notebook open kore tunnel cell run korte hobe. Free tunnel URL permanent na (trycloudflare random).
+
 ## Quick Reference
 
 | Item | Value |
@@ -203,6 +299,8 @@ print("Keep-alive started. Notebook connected thakbe.")
 | MongoDB | Atlas recommended (0.0.0.0/0 network) |
 | Data sync | R2 (`training-data/` prefix) |
 | Model output | R2 (`models/` prefix) → `/api/r2/pull/models` |
+| Public URL | Cloudflare Tunnel → `https://<random>.trycloudflare.com` |
+| Server port | 8000 (Colab) → tunnel → `/api` auto-add |
 | Session limit | ~12 hr (free) |
 
 ## Common Errors
@@ -214,3 +312,6 @@ print("Keep-alive started. Notebook connected thakbe.")
 | MongoDB connection timeout | Atlas network access `0.0.0.0/0` |
 | Out of memory (OOM) | Batch size koman (32 → 16) |
 | R2 not configured | Settings page e credentials set + Test Connection |
+| `cloudflared: command not found` | Cell 9 abar run koren (install fail) |
+| Tunnel URL open na | Token valid kina check + `pkill -f cloudflared` then re-run |
+| App connect fail (tunnel) | URL e `/api` likhben na — auto-add hobe; tunnel URL te `https://` thakbe |
