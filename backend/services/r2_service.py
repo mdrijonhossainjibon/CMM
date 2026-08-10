@@ -251,6 +251,60 @@ class R2Service:
 
         return {"success": failed == 0, "uploaded": uploaded, "failed": failed}
 
+    async def sync_directory(self, local_dir: str, r2_prefix: str) -> dict:
+        """True mirror sync: upload local files, delete R2 objects that no longer exist locally."""
+        if not await self._is_configured():
+            return {"success": False, "uploaded": 0, "deleted": 0, "reason": "R2 disabled"}
+
+        # 1) Collect local files -> r2_key map
+        local_files = {}
+        if os.path.exists(local_dir):
+            for root, _, filenames in os.walk(local_dir):
+                for fname in filenames:
+                    local_path = os.path.join(root, fname)
+                    rel = os.path.relpath(local_path, local_dir).replace("\\", "/")
+                    r2_key = f"{r2_prefix}/{rel}" if r2_prefix else rel
+                    local_files[r2_key] = local_path
+
+        # 2) Upload/refresh local files
+        uploaded = 0
+        failed = 0
+        for r2_key, local_path in local_files.items():
+            content_type = _guess_content_type(local_path)
+            ok = await self.upload_file(local_path, r2_key, content_type)
+            if ok:
+                uploaded += 1
+            else:
+                failed += 1
+
+        # 3) Delete R2 objects that don't exist locally (stale data)
+        deleted = 0
+        try:
+            objects = await self.list_objects(r2_prefix)
+            remote_keys = {o["key"] for o in objects}
+            stale = [k for k in remote_keys if k not in local_files]
+            for batch_start in range(0, len(stale), 1000):
+                batch = stale[batch_start : batch_start + 1000]
+                client = await self._get_client()
+                bucket = await self._get_bucket()
+                await self._run_sync(
+                    client.delete_objects,
+                    Bucket=bucket,
+                    Delete={"Objects": [{"Key": k} for k in batch]},
+                )
+                deleted += len(batch)
+            if stale:
+                logger.info("R2 sync deleted %d stale object(s) under '%s'", len(stale), r2_prefix)
+        except Exception as e:
+            logger.warning("R2 sync stale-cleanup failed: %s", e)
+
+        return {
+            "success": failed == 0,
+            "uploaded": uploaded,
+            "failed": failed,
+            "deleted": deleted,
+        }
+
     async def download_directory(self, r2_prefix: str, local_dir: str) -> dict:
         if not await self._is_configured():
             return {"success": False, "downloaded": 0, "failed": 0, "reason": "R2 disabled"}
