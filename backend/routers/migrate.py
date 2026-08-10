@@ -91,12 +91,18 @@ async def transfer_to_atlas(body: TransferRequest, current_user: dict = Depends(
         if not local_collections:
             raise HTTPException(status_code=400, detail="No collections to transfer")
 
-        summary = []
+        # Fetch all docs from local (async) FIRST — Motor cursor sync context e iterate kora jay na
+        all_docs = {}
+        for coll_name in local_collections:
+            docs = []
+            cursor = local_db[coll_name].find({})
+            async for doc in cursor:
+                docs.append(doc)
+            all_docs[coll_name] = docs
 
         def _transfer_collection(client, coll_name):
-            coll = local_db[coll_name]
             target = client[target_db_name][coll_name]
-            docs = list(coll.find({}))
+            docs = all_docs[coll_name]
             if body.drop_first:
                 target.delete_many({})
             if docs:
