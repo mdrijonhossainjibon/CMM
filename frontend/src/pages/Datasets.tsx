@@ -284,6 +284,37 @@ export default function Datasets() {
       </Modal>
 
       <Modal
+        open={confirmDeleteAll}
+        onClose={() => !deletingAll && setConfirmDeleteAll(false)}
+        title="Delete All Images"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-dark-text">
+            Are you sure you want to delete all{' '}
+            <span className="text-dark-heading font-medium">{images.length}</span> image(s) from the{' '}
+            <span className="text-dark-heading font-medium">{tab}</span> dataset? This cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDeleteAll}
+              disabled={deletingAll}
+              className="flex-1 py-2.5 rounded-lg bg-danger text-white text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
+            >
+              {deletingAll ? 'Deleting...' : 'Delete All'}
+            </button>
+            <button
+              onClick={() => setConfirmDeleteAll(false)}
+              disabled={deletingAll}
+              className="px-4 py-2.5 rounded-lg border border-dark-border text-dark-text text-sm hover:bg-dark-surface transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={confirmDeleteClass}
         onClose={() => !deletingClass && setConfirmDeleteClass(false)}
         title="Delete Class"

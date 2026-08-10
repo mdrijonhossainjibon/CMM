@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import GlassPanel from '../components/common/GlassPanel';
 import { Icon } from '../components/common/Icons';
-import { settingsService, type R2Config, type R2Stats } from '../services/settingsService';
+import { settingsService, type R2Stats } from '../services/settingsService';
 import toast from 'react-hot-toast';
 
 export default function Settings() {

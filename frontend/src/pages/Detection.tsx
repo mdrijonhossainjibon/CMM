@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import GlassPanel from '../components/common/GlassPanel';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Icon } from '../components/common/Icons';
@@ -16,7 +16,6 @@ const MODEL_TYPES = [
 
 const THRESHOLD_PRESETS = [0.3, 0.5, 0.7, 0.9] as const;
 const GRID_SIZE = 9;
-const COLS = 3;
 
 interface ImageSlot {
   file: File;

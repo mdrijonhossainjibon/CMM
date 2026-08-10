@@ -77,7 +77,6 @@ export default function DataUpload() {
     c.name.toLowerCase().includes(className.toLowerCase())
   );
   const exactMatch = classes.some((c) => c.name.toLowerCase() === className.trim().toLowerCase());
-  const showCombo = comboOpen && className.length === 0;
 
   const selectClass = (name: string) => {
     setClassName(name);

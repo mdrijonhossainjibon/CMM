@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Image } from 'antd';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAppDispatch, useAppSelector } from '../app/store';
-import { login, googleLogin, clearError } from '../store/slices/authSlice';
+import { login, googleLogin, clearError, setError } from '../store/slices/authSlice';
 
 function GoogleSignInButton() {
   const dispatch = useAppDispatch();
@@ -14,7 +14,7 @@ function GoogleSignInButton() {
       dispatch(googleLogin(tokenResponse.access_token));
     },
     onError: () => {
-      dispatch(login.rejected(new Error('Google sign-in failed'), '', undefined, 'Google sign-in failed'));
+      dispatch(setError('Google sign-in failed'));
     },
   });
 

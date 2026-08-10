@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { Icon } from '../components/common/Icons';
 import { getUsers, createAdmin, deleteAdmin, getStats, getGpuStatus, getStorageStatus } from '../services/adminService';
+import toast from 'react-hot-toast';
 import type { AdminUserInfo, AdminStatsResponse, AdminGpuResponse, AdminStorageResponse } from '../types';
 
 function safePercent(value: number, total: number): string {
@@ -170,7 +171,6 @@ export default function Admin() {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [creating, setCreating] = useState(false);
-  const [toast, setToast] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -220,12 +220,10 @@ export default function Admin() {
       await createAdmin(newUsername.trim(), newPassword);
       setNewUsername('');
       setNewPassword('');
-      setToast(`Admin "${newUsername.trim()}" created!`);
-      setTimeout(() => setToast(''), 3000);
+      toast.success(`Admin "${newUsername.trim()}" created!`);
       fetchData();
     } catch (err: unknown) {
-      setToast(err instanceof Error ? err.message : 'Failed to create admin');
-      setTimeout(() => setToast(''), 3000);
+      toast.error(err instanceof Error ? err.message : 'Failed to create admin');
     } finally {
       setCreating(false);
     }
@@ -234,12 +232,10 @@ export default function Admin() {
   const handleDeleteAdmin = async (username: string) => {
     try {
       await deleteAdmin(username);
-      setToast(`User "${username}" deleted`);
-      setTimeout(() => setToast(''), 3000);
+      toast.success(`User "${username}" deleted`);
       fetchData();
     } catch (err: unknown) {
-      setToast(err instanceof Error ? err.message : 'Failed to delete user');
-      setTimeout(() => setToast(''), 3000);
+      toast.error(err instanceof Error ? err.message : 'Failed to delete user');
     }
   };
 

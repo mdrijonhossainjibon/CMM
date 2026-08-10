@@ -16,7 +16,7 @@ const SOURCE_META: Record<string, { label: string; cls: string }> = {
   cloud: { label: 'CLOUD', cls: 'bg-success/10 text-success border-success/20' },
 };
 
-const SOURCE_ICONS: Record<string, JSX.Element> = {
+const SOURCE_ICONS: Record<string, React.ReactNode> = {
   system: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
       <rect x="2" y="6" width="20" height="12" rx="2" />
