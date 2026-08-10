@@ -1,8 +1,70 @@
-# 🚀 Colab GPU — CaptchaMaster Setup
+# 🚀 CaptchaMaster — Colab GPU / VPS Setup
 
-Local CPU te training slow, Colab GPU te **10-20x fast**. Ekhane shudhu 3-4 ta step.
+Local CPU te training slow, Colab GPU te **10-20x fast**, VPS GPU te **full-time 24/7**.
 
 ---
+
+## 📊 Hardware Requirements (RAM / Storage / GPU)
+
+| Resource | Local PC | Colab (free) | VPS (GPU) | VPS (CPU) |
+|---|---|---|---|---|
+| **GPU** | ❌ CPU only | ✅ T4 (16GB) | ✅ RTX 4090 / A100 | ❌ CPU |
+| **RAM** | 8-16 GB | 12.7 GB | 16-32 GB | 4-8 GB |
+| **Storage** | 10-20 GB | 78 GB (session only) | 40-100 GB | 20-40 GB |
+| **Training speed** | 1x (slow) | ~15-20x | ~30-50x | ~2-3x |
+| **Uptime** | 24/7 | ~12 hr/session | 24/7 | 24/7 |
+| **Cost** | Free | Free | $0.3-1/hr | $5-20/mo |
+| **Batch size** | 8-16 | 32-64 | 32-64 | 8-16 |
+| **Best for** | Testing | Fast training | Production 24/7 | Budget hosting |
+
+> **VPS GPU batch size:** RTX 4090 (24GB) e `batch=64`, A100 (80GB) e `batch=128`.
+> **Colab e puro session delete hoye jay** — model/data R2 te upload kora obbosshoi.
+
+---
+
+## 🖥 VPS Setup (Ubuntu 22.04)
+
+DigitalOcean / Vultr / Hetzner e Ubuntu VPS hole:
+
+```bash
+# 1. Update + Python
+sudo apt update && sudo apt install -y python3 python3-pip python3-venv git
+python3 --version
+
+# 2. Clone
+git clone https://github.com/mdrijonhossainjibon/CMM.git && cd CMM
+
+# 3. Virtual env + install
+python3 -m venv venv
+source venv/bin/activate
+pip install ultralytics torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install fastapi "uvicorn[standard]" python-multipart python-dotenv pydantic pydantic-settings "python-jose[cryptography]" "passlib[bcrypt]" opencv-python pillow numpy pi-heif watchfiles psutil motor pymongo google-auth boto3 websockets onnx onnxslim onnxruntime
+
+# 4. MongoDB Atlas connect
+export MONGODB_URI="mongodb+srv://USER:PASSWORD@cluster.mongodb.net/captchamaster"
+export MONGODB_DB_NAME="captchamaster"
+
+# 5. Start server (production)
+nohup uvicorn backend.main:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+echo "Server: http://$(curl -s ifconfig.me):8000"
+
+# 6. Auto-restart (PM2)
+npm install -g pm2
+pm2 start "uvicorn backend.main:app --host 0.0.0.0 --port 8000" --name captchamaster
+pm2 save && pm2 startup
+
+# 7. Firewall open
+sudo ufw allow 8000/tcp
+```
+
+> **VPS CPU (no GPU):** CPU mode e cholbe, kintu `pip install torch torchvision` (CPU version) use korun — `cu121` wheel GPU te.
+> **GPU VPS:** NVIDIA driver + CUDA install korte hobe.
+
+---
+
+## ☁ Colab Setup (free GPU)
+
+
 
 ## Step 1 — Notebook + GPU
 
@@ -167,6 +229,14 @@ print("Keep-alive on")
 | Model upload | Step 6 |
 | Server + Tunnel | Last cell |
 
+| Resource | Colab | VPS GPU | VPS CPU |
+|---|---|---|---|
+| GPU | T4 16GB | RTX 4090/A100 | CPU only |
+| RAM | 12.7 GB | 16-32 GB | 4-8 GB |
+| Cost | Free | $0.3-1/hr | $5-20/mo |
+| Batch | 32-64 | 64-128 | 8-16 |
+| Uptime | ~12hr | 24/7 | 24/7 |
+
 ## Common Errors
 
 | Problem | Fix |
@@ -175,6 +245,7 @@ print("Keep-alive on")
 | MongoDB timeout | Atlas Network Access e `0.0.0.0/0` |
 | OOM (memory) | `TRAIN_BATCH_SIZE=16` diye train |
 | Session disconnect | Keep-alive cell run koren |
+| VPS `torch` GPU error | VPS CPU hole CUDA wheel na — plain `pip install torch` |
 
 ---
 
