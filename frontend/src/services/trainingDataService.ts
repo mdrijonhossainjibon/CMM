@@ -26,9 +26,13 @@ export async function getTrainingClasses(): Promise<TrainingClassesResponse> {
   return res.data;
 }
 
-export async function getTrainingImages(className = ''): Promise<TrainingImagesResponse> {
+export async function getTrainingImages(className = '', page = 1, limit = 60): Promise<TrainingImagesResponse> {
   const res = await client.get<TrainingImagesResponse>('/training-data/images', {
-    params: className ? { class_name: className } : {},
+    params: {
+      ...(className ? { class_name: className } : {}),
+      page,
+      limit,
+    },
     timeout: 5000,
   });
   return res.data;

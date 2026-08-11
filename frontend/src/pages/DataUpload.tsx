@@ -40,6 +40,9 @@ export default function DataUpload() {
   const [browseImages, setBrowseImages] = useState<TrainingImage[]>([]);
   const [browseFilter, setBrowseFilter] = useState('');
   const [browseLoading, setBrowseLoading] = useState(false);
+  const [browsePage, setBrowsePage] = useState(1);
+  const [browseTotal, setBrowseTotal] = useState(0);
+  const [browseHasMore, setBrowseHasMore] = useState(false);
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameClass, setRenameClass] = useState('');
   const [syncing, setSyncing] = useState<'pull' | 'push' | null>(null);
@@ -93,20 +96,34 @@ export default function DataUpload() {
     } catch { /* ignore */ }
   }, []);
 
-  const fetchBrowseImages = useCallback(async (filterClass = '') => {
+  const fetchBrowseImages = useCallback(async (filterClass = '', page = 1) => {
     setBrowseLoading(true);
     try {
-      const res = await getTrainingImages(filterClass);
+      const res = await getTrainingImages(filterClass, page);
       setBrowseImages(res.images);
+      setBrowseTotal(res.total ?? 0);
+      setBrowsePage(res.page ?? page);
+      setBrowseHasMore(res.has_more ?? false);
     } catch {
       setBrowseImages([]);
+      setBrowseTotal(0);
+      setBrowseHasMore(false);
     } finally {
       setBrowseLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchClasses(); }, [fetchClasses]);
-  useEffect(() => { if (tab === 'browse') fetchBrowseImages(browseFilter); }, [tab, browseFilter, fetchBrowseImages]);
+  useEffect(() => { if (tab === 'browse') fetchBrowseImages(browseFilter, 1); }, [tab, browseFilter, fetchBrowseImages]);
+
+  const handleBrowsePage = (dir: 1 | -1) => {
+    const next = browsePage + dir;
+    if (next < 1) return;
+    if (dir > 0 && !browseHasMore) return;
+    setBrowsePage(next);
+    fetchBrowseImages(browseFilter, next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -205,11 +222,11 @@ export default function DataUpload() {
   };
 
   const handleDeleteClass = async (cls: string) => {
-    try { await deleteTrainingClass(cls); setBrowseFilter(''); fetchClasses(); fetchBrowseImages(''); } catch { /* ignore */ }
+    try { await deleteTrainingClass(cls); setBrowseFilter(''); fetchClasses(); fetchBrowseImages('', 1); } catch { /* ignore */ }
   };
 
   const handleDeleteImage = async (filename: string) => {
-    try { await deleteTrainingImage(filename); fetchClasses(); fetchBrowseImages(browseFilter); } catch { /* ignore */ }
+    try { await deleteTrainingImage(filename); fetchClasses(); fetchBrowseImages(browseFilter, 1); } catch { /* ignore */ }
   };
 
   const handleRename = async () => {
@@ -217,7 +234,7 @@ export default function DataUpload() {
     try {
       await renameTrainingImage(renameTarget, renameClass.trim());
       fetchClasses();
-      fetchBrowseImages(browseFilter);
+      fetchBrowseImages(browseFilter, 1);
       setRenameTarget(null);
       setRenameClass('');
     } catch { /* ignore */ }
@@ -507,6 +524,32 @@ export default function DataUpload() {
                   </span>
                 </motion.div>
               ))}
+            </div>
+          )}
+
+          {!browseLoading && browseTotal > 0 && (
+            <div className="flex items-center justify-center gap-3 mt-4">
+              <button
+                onClick={() => handleBrowsePage(-1)}
+                disabled={browsePage <= 1}
+                className="px-3 py-1.5 rounded-lg bg-dark-surface border border-dark-border text-dark-text text-xs font-medium hover:border-dark-text/30 hover:text-dark-heading transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+              >
+                <Icon name="chevronLeft" className="w-3.5 h-3.5" />
+                Prev
+              </button>
+              <span className="text-xs text-dark-text">
+                Page <span className="text-dark-heading font-medium">{browsePage}</span> of{' '}
+                <span className="text-dark-heading font-medium">{Math.max(Math.ceil(browseTotal / 60), 1)}</span>
+                <span className="text-dark-text/50 ml-2">({browseTotal} images)</span>
+              </span>
+              <button
+                onClick={() => handleBrowsePage(1)}
+                disabled={!browseHasMore}
+                className="px-3 py-1.5 rounded-lg bg-dark-surface border border-dark-border text-dark-text text-xs font-medium hover:border-dark-text/30 hover:text-dark-heading transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+              >
+                Next
+                <Icon name="chevronRight" className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
         </>

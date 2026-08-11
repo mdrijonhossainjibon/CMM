@@ -138,12 +138,15 @@ async def list_training_classes():
 
 
 @router.get("/training-data/images")
-async def list_training_images(request: Request, class_name: str = ""):
+async def list_training_images(request: Request, class_name: str = "", page: int = 1, limit: int = 60):
     data_dir = settings.TRAINING_DATA_DIR
     if not os.path.exists(data_dir):
-        return {"images": []}
+        return {"images": [], "total": 0, "page": 1, "limit": limit, "has_more": False}
 
-    images = []
+    page = max(page, 1)
+    limit = min(max(limit, 1), 300)
+
+    all_images = []
     for f in sorted(os.listdir(data_dir)):
         full = os.path.join(data_dir, f)
         if not os.path.isfile(full) or not _is_image_file(f):
@@ -151,14 +154,20 @@ async def list_training_images(request: Request, class_name: str = ""):
         cls = get_class(f, data_dir, f.split("_")[0])
         if class_name and cls != class_name.lower():
             continue
-        images.append({
+        all_images.append({
             "filename": f,
             "class": cls,
             # Relative URL — frontend configured base theke resolve korbe
             "url": f"api/datasets/train?file={f}",
         })
 
-    return {"images": images}
+    total = len(all_images)
+    start = (page - 1) * limit
+    end = start + limit
+    has_more = end < total
+    images = all_images[start:end]
+
+    return {"images": images, "total": total, "page": page, "limit": limit, "has_more": has_more}
 
 
 async def _r2_delete_object(r2_key: str):

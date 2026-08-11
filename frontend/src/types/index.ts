@@ -122,6 +122,10 @@ export interface TrainingImage {
 
 export interface TrainingImagesResponse {
   images: TrainingImage[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  has_more?: boolean;
 }
 
 export interface BatchUploadResponse {
