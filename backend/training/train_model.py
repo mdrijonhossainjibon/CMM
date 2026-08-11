@@ -60,13 +60,14 @@ class MongoLogSession:
         try:
             self._connect()
             from bson import ObjectId
+            from datetime import datetime as _dt, timezone as _tz
             self._db["logs"].update_one(
                 {"_id": ObjectId(self.session_id)},
                 {
                     "$set": {
                         "status": status,
                         "progress": 100 if status == "completed" else None,
-                        "ended_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "ended_at": _dt.now(_tz.utc),
                     }
                 },
             )

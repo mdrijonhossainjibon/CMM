@@ -4,11 +4,36 @@ from bson import ObjectId
 from backend.db.connection import get_db
 
 
+def _parse_dt(value):
+    """Parse datetime from datetime object or ISO string."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            # Handle '2026-08-11T00:07:17' (no microseconds) and with microseconds
+            return datetime.fromisoformat(value)
+        except Exception:
+            try:
+                return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
+            except Exception:
+                return None
+    return None
+
+
 def _duration_seconds(started_at, ended_at) -> int | None:
-    if not started_at or not ended_at:
+    start = _parse_dt(started_at)
+    end = _parse_dt(ended_at)
+    if not start or not end:
         return None
     try:
-        delta = ended_at - started_at
+        # Naive/aware mismatch handle — both to naive UTC
+        if start.tzinfo is not None:
+            start = start.replace(tzinfo=None)
+        if end.tzinfo is not None:
+            end = end.replace(tzinfo=None)
+        delta = end - start
         return max(int(delta.total_seconds()), 0)
     except Exception:
         return None
