@@ -143,7 +143,6 @@ async def list_training_images(request: Request, class_name: str = ""):
     if not os.path.exists(data_dir):
         return {"images": []}
 
-    base = str(request.base_url).rstrip("/")
     images = []
     for f in sorted(os.listdir(data_dir)):
         full = os.path.join(data_dir, f)
@@ -155,7 +154,8 @@ async def list_training_images(request: Request, class_name: str = ""):
         images.append({
             "filename": f,
             "class": cls,
-            "url": f"{base}/api/datasets/train?file={f}",
+            # Relative URL — frontend configured base theke resolve korbe
+            "url": f"api/datasets/train?file={f}",
         })
 
     return {"images": images}

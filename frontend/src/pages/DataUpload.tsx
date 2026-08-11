@@ -482,7 +482,7 @@ export default function DataUpload() {
                   className="relative group aspect-square rounded-xl overflow-hidden border border-dark-border hover:border-primary/40 transition-colors"
                 >
                   <img
-                    src={img.url || getAssetUrl(`api/datasets/train?file=${img.filename}`)}
+                    src={getAssetUrl(img.url || `api/datasets/train?file=${img.filename}`)}
                     alt={img.filename}
                     className="w-full h-full object-cover"
                   />
