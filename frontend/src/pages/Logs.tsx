@@ -7,6 +7,17 @@ import Modal from '../components/common/Modal';
 import { getLogs, readLogFile, deleteLogSession, type LogSession } from '../services/logService';
 import toast from 'react-hot-toast';
 
+function formatDuration(seconds?: number | null): string {
+  if (seconds == null) return '—';
+  if (seconds < 60) return `${seconds} sec`;
+  const min = Math.floor(seconds / 60);
+  const sec = seconds % 60;
+  if (min < 60) return sec > 0 ? `${min}m ${sec}s` : `${min} min`;
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  return remMin > 0 ? `${hr}h ${remMin}m` : `${hr} hr`;
+}
+
 export default function Logs() {
   const [sessions, setSessions] = useState<LogSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,6 +108,9 @@ export default function Logs() {
                 </div>
                 <p className="mt-1 text-[9px] text-dark-text/40 truncate">
                   {s.training_type} · {s.line_count} lines
+                  {s.duration_seconds != null && s.status === 'completed' && (
+                    <span className="text-success/80"> · ⏱ {formatDuration(s.duration_seconds)}</span>
+                  )}
                 </p>
               </button>
             );
@@ -109,14 +123,27 @@ export default function Logs() {
           <h3 className="text-sm font-medium text-dark-heading truncate">
             {sessions.find((s) => s.id === selectedId)?.name || 'Select a session'}
           </h3>
-          {selectedId && (
-            <button
-              onClick={() => setConfirmDelete(selectedId)}
-              className="text-[11px] text-danger px-2 py-1 rounded hover:bg-danger/10 transition-colors flex items-center gap-1 shrink-0 ml-2"
-            >
-              Delete
-            </button>
-          )}
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            {selectedId && (() => {
+              const s = sessions.find((x) => x.id === selectedId);
+              return s?.duration_seconds != null && s.status === 'completed' ? (
+                <span className="text-[11px] px-2.5 py-1 rounded-lg bg-success/10 text-success border border-success/20 flex items-center gap-1.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5">
+                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  {formatDuration(s.duration_seconds)}
+                </span>
+              ) : null;
+            })()}
+            {selectedId && (
+              <button
+                onClick={() => setConfirmDelete(selectedId)}
+                className="text-[11px] text-danger px-2 py-1 rounded hover:bg-danger/10 transition-colors flex items-center gap-1"
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex-1 bg-dark-surface rounded-lg p-4 overflow-y-auto font-mono text-xs text-dark-text leading-relaxed">
           {selectedId ? (

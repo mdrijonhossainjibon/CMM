@@ -9,6 +9,7 @@ export interface LogSession {
   line_count: number;
   started_at?: string;
   ended_at?: string;
+  duration_seconds?: number | null;
 }
 
 export interface LogSessionDetail {

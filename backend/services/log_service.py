@@ -4,6 +4,16 @@ from bson import ObjectId
 from backend.db.connection import get_db
 
 
+def _duration_seconds(started_at, ended_at) -> int | None:
+    if not started_at or not ended_at:
+        return None
+    try:
+        delta = ended_at - started_at
+        return max(int(delta.total_seconds()), 0)
+    except Exception:
+        return None
+
+
 class LogService:
     def __init__(self):
         self._collection = None
@@ -98,6 +108,7 @@ class LogService:
                 "line_count": len(doc.get("lines", [])),
                 "started_at": doc.get("started_at"),
                 "ended_at": doc.get("ended_at"),
+                "duration_seconds": _duration_seconds(doc.get("started_at"), doc.get("ended_at")),
             })
         return sessions
 
@@ -119,6 +130,7 @@ class LogService:
             "lines": doc.get("lines", []),
             "started_at": doc.get("started_at"),
             "ended_at": doc.get("ended_at"),
+            "duration_seconds": _duration_seconds(doc.get("started_at"), doc.get("ended_at")),
         }
 
     async def delete_session(self, session_id: str) -> bool:
