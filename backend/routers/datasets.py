@@ -35,8 +35,25 @@ def _serve_file(directory: str, file: str, fallback_dir: str = None):
     raise HTTPException(status_code=404, detail="File not found")
 
 
+def _paginate(images: list[dict], page: int, limit: int):
+    page = max(page, 1)
+    limit = min(max(limit, 1), 300)
+    total = len(images)
+    start = (page - 1) * limit
+    end = start + limit
+    return {
+        "images": [i["filename"] for i in images[start:end]],
+        "classes": list({i["class"] for i in images}),
+        "count": len(images[start:end]),
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "has_more": end < total,
+    }
+
+
 @router.get("/train")
-async def get_train_images(file: str = Query(None)):
+async def get_train_images(file: str = Query(None), page: int = 1, limit: int = 60):
     train_dir = os.path.join(settings.DATASET_DIR, "train", "images")
     if file:
         return _serve_file(train_dir, file, settings.TRAINING_DATA_DIR)
@@ -45,17 +62,14 @@ async def get_train_images(file: str = Query(None)):
     if not images:
         images = _scan_images(settings.TRAINING_DATA_DIR)
         source = "training_data"
-    return JSONResponse({
-        "images": [i["filename"] for i in images],
-        "classes": list({i["class"] for i in images}),
-        "count": len(images),
-        "path": train_dir,
-        "source": source,
-    })
+    data = _paginate(images, page, limit)
+    data["path"] = train_dir
+    data["source"] = source
+    return JSONResponse(data)
 
 
 @router.get("/val")
-async def get_val_images(file: str = Query(None)):
+async def get_val_images(file: str = Query(None), page: int = 1, limit: int = 60):
     val_dir = os.path.join(settings.DATASET_DIR, "val", "images")
     if file:
         return _serve_file(val_dir, file, settings.TRAINING_DATA_DIR)
@@ -64,13 +78,10 @@ async def get_val_images(file: str = Query(None)):
     if not images:
         images = _scan_images(settings.TRAINING_DATA_DIR)
         source = "training_data"
-    return JSONResponse({
-        "images": [i["filename"] for i in images],
-        "classes": list({i["class"] for i in images}),
-        "count": len(images),
-        "path": val_dir,
-        "source": source,
-    })
+    data = _paginate(images, page, limit)
+    data["path"] = val_dir
+    data["source"] = source
+    return JSONResponse(data)
 
 
 @router.get("/uploaded")

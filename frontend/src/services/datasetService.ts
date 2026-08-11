@@ -1,15 +1,17 @@
 import client from './apiClient';
 import type { DatasetImageResponse } from '../types';
 
-export async function getTrainImages(): Promise<DatasetImageResponse> {
+export async function getTrainImages(page = 1, limit = 60): Promise<DatasetImageResponse> {
   const res = await client.get<DatasetImageResponse>('/datasets/train', {
+    params: { page, limit },
     timeout: 10000,
   });
   return res.data;
 }
 
-export async function getValImages(): Promise<DatasetImageResponse> {
+export async function getValImages(page = 1, limit = 60): Promise<DatasetImageResponse> {
   const res = await client.get<DatasetImageResponse>('/datasets/val', {
+    params: { page, limit },
     timeout: 10000,
   });
   return res.data;

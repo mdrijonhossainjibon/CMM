@@ -39,20 +39,33 @@ export default function Datasets() {
   const [deletingAll, setDeletingAll] = useState(false);
   const [deletingClass, setDeletingClass] = useState(false);
   const [selectedClass, setSelectedClass] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [train, val] = await Promise.all([getTrainImages(), getValImages()]);
+      const [train, val] = await Promise.all([getTrainImages(page), getValImages()]);
       setTrainData(train);
       setValData(val);
+      setTotal(train.total ?? 0);
+      setHasMore(train.has_more ?? false);
     } catch {
       setError('Failed to load dataset images');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
+
+  const handlePage = (dir: 1 | -1) => {
+    const next = page + dir;
+    if (next < 1) return;
+    if (dir > 0 && !hasMore) return;
+    setPage(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -73,6 +86,7 @@ export default function Datasets() {
       }
       toast.success(`Deleted ${filename}`);
       setConfirmTarget(null);
+      setPage(1);
       fetchData();
     } catch {
       toast.error('Failed to delete image');
@@ -92,6 +106,7 @@ export default function Datasets() {
       const res = await deleteDataset(imageDir);
       toast.success(`Deleted ${res.deleted_count} image(s)`);
       setConfirmDeleteAll(false);
+      setPage(1);
       fetchData();
     } catch {
       toast.error('Failed to delete dataset');
@@ -110,6 +125,7 @@ export default function Datasets() {
         toast.success(`Deleted class "${selectedClass}"`);
         setConfirmDeleteClass(false);
         setSelectedClass('');
+        setPage(1);
         fetchData();
       } catch {
         toast.error('Failed to delete class');
@@ -124,6 +140,7 @@ export default function Datasets() {
       toast.success(`Deleted ${res.deleted_count} image(s) of class "${selectedClass}"`);
       setConfirmDeleteClass(false);
       setSelectedClass('');
+      setPage(1);
       fetchData();
     } catch {
       toast.error('Failed to delete class');
@@ -259,6 +276,32 @@ export default function Datasets() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!loading && total > 0 && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => handlePage(-1)}
+            disabled={page <= 1}
+            className="px-3 py-1.5 rounded-lg bg-dark-surface border border-dark-border text-dark-text text-xs font-medium hover:border-dark-text/30 hover:text-dark-heading transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+          >
+            <Icon name="chevronLeft" className="w-3.5 h-3.5" />
+            Prev
+          </button>
+          <span className="text-xs text-dark-text">
+            Page <span className="text-dark-heading font-medium">{page}</span> of{' '}
+            <span className="text-dark-heading font-medium">{Math.max(Math.ceil(total / 60), 1)}</span>
+            <span className="text-dark-text/50 ml-2">({total} images)</span>
+          </span>
+          <button
+            onClick={() => handlePage(1)}
+            disabled={!hasMore}
+            className="px-3 py-1.5 rounded-lg bg-dark-surface border border-dark-border text-dark-text text-xs font-medium hover:border-dark-text/30 hover:text-dark-heading transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+          >
+            Next
+            <Icon name="chevronRight" className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

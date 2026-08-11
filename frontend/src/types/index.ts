@@ -89,6 +89,10 @@ export interface DatasetImageResponse {
   path: string;
   source?: string;
   classes?: string[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  has_more?: boolean;
 }
 
 export interface SaveTrainingDataResponse {
