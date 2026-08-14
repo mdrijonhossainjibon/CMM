@@ -342,6 +342,9 @@ pip install fastapi "uvicorn[standard]" python-multipart python-dotenv pydantic 
 # 3. GPU check
 python -c "import torch; print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO GPU')"
 
+pip uninstall bcrypt -y
+pip install bcrypt==3.2.2
+
 # 4. MongoDB
 export MONGODB_URI="mongodb+srv://USER:PASSWORD@cluster.mongodb.net/captchamaster"
 export MONGODB_DB_NAME="captchamaster"
@@ -355,8 +358,8 @@ TRAIN_EPOCHS=50 TRAIN_BATCH_SIZE=32 python backend/training/train_model.py
 # 7. Server + Tunnel (public URL)
 wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
 chmod +x cloudflared-linux-amd64 && mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
-nohup python backend/main.py > server.log 2>&1 &
-nohup cloudflared tunnel --url http://localhost:8000 > tunnel.log 2>&1 &
+ python backend/main.py  
+ !cloudflared tunnel --url http://localhost:8000 > tunnel.log 2>&1 &
 sleep 15 && grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' tunnel.log | head -1
 ```
 
