@@ -1,5 +1,9 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
+function isNgrokUrl(url: string): boolean {
+  return /ngrok(-free)?\.(app|io|dev)/i.test(url) || url.includes('ngrok');
+}
+
 function getBaseURL(): string {
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl) return envUrl;
@@ -17,6 +21,10 @@ const client = axios.create({
 });
 
 client.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const base = client.defaults.baseURL || '';
+  if (isNgrokUrl(base) && config.headers) {
+    config.headers['ngrok-skip-browser-warning'] = '1';
+  }
   const token = localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
