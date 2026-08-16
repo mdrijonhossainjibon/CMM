@@ -5,7 +5,7 @@ import { useAppDispatch, useAppSelector } from '../../app/store';
 import { toggleTheme } from '../../store/slices/themeSlice';
 import { logout } from '../../store/slices/authSlice';
 import { setServerUrl } from '../../store/slices/serverSlice';
-import { updateBaseURL } from '../../services/apiClient';
+import { updateBaseURL, isNgrokUrl } from '../../services/apiClient';
 import { useNavigate } from 'react-router-dom';
 
 interface TopbarProps {
@@ -40,11 +40,11 @@ export default function Topbar({ title, onToggleSidebar }: TopbarProps) {
 
   const testConnection = async (targetUrl: string) => {
     try {
-      const res = await fetch(`${targetUrl}/health`);
-      if (res.ok) return true;
+      const headers: Record<string, string> = {};
+      if (isNgrokUrl(targetUrl)) headers['ngrok-skip-browser-warning'] = '1';
+      const res = await fetch(`${targetUrl}/health`, { headers });
       const data = await res.json().catch(() => null);
-      if (data?.status === 'ok') return true;
-      return false;
+      return data?.status === 'ok';
     } catch {
       return false;
     }

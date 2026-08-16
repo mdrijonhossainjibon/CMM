@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppDispatch } from '../app/store';
 import { setServerUrl } from '../store/slices/serverSlice';
-import { updateBaseURL } from '../services/apiClient';
+import { updateBaseURL, isNgrokUrl } from '../services/apiClient';
 
 const DEFAULT_URL = 'http://localhost:8000/api';
 
@@ -23,11 +23,14 @@ export default function Connect() {
 
   const testConnection = async (targetUrl: string) => {
     try {
-      const res = await fetch(`${targetUrl}/health`, { signal: AbortSignal.timeout(5000) });
-      if (res.ok) return true;
+      const headers: Record<string, string> = {};
+      if (isNgrokUrl(targetUrl)) headers['ngrok-skip-browser-warning'] = '1';
+      const res = await fetch(`${targetUrl}/health`, {
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
       const data = await res.json().catch(() => null);
-      if (data?.status === 'ok') return true;
-      return false;
+      return data?.status === 'ok';
     } catch {
       return false;
     }

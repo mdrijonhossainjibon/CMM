@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
-function isNgrokUrl(url: string): boolean {
+export function isNgrokUrl(url: string): boolean {
   return /ngrok(-free)?\.(app|io|dev)/i.test(url) || url.includes('ngrok');
 }
 
