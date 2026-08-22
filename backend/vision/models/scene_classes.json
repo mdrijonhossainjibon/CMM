@@ -1,9 +1,8 @@
 {
   "classes": [
-    "dcfg",
-    "dr",
-    "fgy"
+    "beach",
+    "castle"
   ],
-  "num_classes": 3,
+  "num_classes": 2,
   "image_size": 224
 }

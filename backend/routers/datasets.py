@@ -1,5 +1,6 @@
 import os
 import time
+from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Form
 from fastapi.responses import JSONResponse, FileResponse
 
@@ -277,3 +278,119 @@ async def download_zip_backup(dataset_id: str):
     if not os.path.isfile(backup):
         raise HTTPException(status_code=404, detail=f"Backup ZIP for dataset '{dataset_id}' not found")
     return FileResponse(backup, filename=f"{dataset_id}.zip", media_type="application/zip")
+
+
+# ------------------------------------------------------------------
+# Dataset Splitter — mixed image (object + bg) → separate crops
+# ------------------------------------------------------------------
+
+@router.post("/split")
+async def split_images(
+    files: List[UploadFile] = File(...),
+    object_class: str = Form(...),
+    bg_class: str = Form(...),
+    conf_threshold: float = Form(0.35),
+):
+    if not object_class.strip() or not bg_class.strip():
+        raise HTTPException(status_code=400, detail="object_class and bg_class are required")
+
+    from backend.services import splitter_service
+
+    results = []
+    errors = []
+    for f in files:
+        try:
+            content = await f.read()
+            res = await splitter_service.split_image(
+                content, object_class, bg_class, conf_threshold
+            )
+            results.append({"file": f.filename, **res})
+        except Exception as e:
+            errors.append(f"{f.filename}: {str(e)}")
+
+    return {
+        "success": len(errors) == 0,
+        "processed": len(results),
+        "results": results,
+        "errors": errors,
+        "stats": splitter_service.get_stats(),
+    }
+
+
+@router.get("/split/stats")
+async def split_stats():
+    from backend.services import splitter_service
+    return splitter_service.get_stats()
+
+
+@router.delete("/split/{kind}/{class_name}")
+async def split_delete_class(kind: str, class_name: str):
+    if kind not in ("objects", "backgrounds"):
+        raise HTTPException(status_code=400, detail="kind must be 'objects' or 'backgrounds'")
+    from backend.services import splitter_service
+    try:
+        count = splitter_service.delete_class(kind, class_name)
+        return {"success": True, "deleted_count": count, "kind": kind, "class": class_name}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/split/{kind}/{class_name}/images")
+async def split_list_images(kind: str, class_name: str):
+    if kind not in ("objects", "backgrounds"):
+        raise HTTPException(status_code=400, detail="kind must be 'objects' or 'backgrounds'")
+    from backend.services import splitter_service
+    try:
+        return {"success": True, "kind": kind, "class": class_name, "images": splitter_service.list_images(kind, class_name)}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/split/{kind}/{class_name}/image")
+async def split_get_image(kind: str, class_name: str, file: str = Query(...)):
+    if kind not in ("objects", "backgrounds"):
+        raise HTTPException(status_code=400, detail="kind must be 'objects' or 'backgrounds'")
+    from backend.services import splitter_service
+    try:
+        return FileResponse(splitter_service.image_path(kind, class_name, file))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/split/{kind}/{class_name}/zip")
+async def split_download_zip(kind: str, class_name: str):
+    if kind not in ("objects", "backgrounds"):
+        raise HTTPException(status_code=400, detail="kind must be 'objects' or 'backgrounds'")
+    from backend.services import splitter_service
+    try:
+        path = splitter_service.zip_class(kind, class_name)
+        return FileResponse(path, filename=os.path.basename(path), media_type="application/zip")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/bg-upload")
+async def upload_bg_zip(file: UploadFile = File(...), replace: bool = Form(False)):
+    """Import a ZIP of pure background images into datasets/backgrounds/."""
+    from backend.services import splitter_service
+    try:
+        content = await file.read()
+        res = splitter_service.import_bg_zip(content, replace=replace)
+        return res
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"BG ZIP import failed: {str(e)}")
+
+
+@router.post("/auto-zip")
+async def upload_auto_zip(file: UploadFile = File(...), replace: bool = Form(False)):
+    """Smart ZIP: "X and Y" folders auto-split, plain folders import as bg."""
+    from backend.services import splitter_service
+    try:
+        content = await file.read()
+        return await splitter_service.auto_zip(content, replace=replace)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Auto ZIP failed: {str(e)}")

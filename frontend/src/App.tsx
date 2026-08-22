@@ -7,8 +7,10 @@ import Dashboard from './pages/Dashboard';
 import Detection from './pages/Detection';
 import Training from './pages/Training';
 import ZipDatasets from './pages/ZipDatasets';
+import Split from './pages/Split';
+import BgTraining from './pages/BgTraining';
+import Detector from './pages/Detector';
 import Models from './pages/Models';
-import SceneTraining from './pages/SceneTraining';
 import Analytics from './pages/Analytics';
 import Datasets from './pages/Datasets';
 import Logs from './pages/Logs';
@@ -44,9 +46,11 @@ function AppRoutes() {
         >
           <Route index element={<Dashboard />} />
           <Route path="detection" element={<Detection />} />
-          <Route path="scene-training" element={<SceneTraining />} />
           <Route path="training" element={<Training />} />
           <Route path="dataset-upload" element={<ZipDatasets />} />
+          <Route path="split" element={<Split />} />
+          <Route path="bg-training" element={<BgTraining />} />
+          <Route path="detector" element={<Detector />} />
           <Route path="models" element={<Models />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="datasets" element={<Datasets />} />

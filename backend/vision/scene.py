@@ -288,6 +288,31 @@ class SceneClassifier:
             logger.debug("ImageNet backbone unavailable: %s", e)
             return None
 
+    def _custom_predict(self, image) -> Optional[Dict[str, float]]:
+        """Run the user-trained EfficientNet scene model, if loaded."""
+        if self._custom_model is None or not self.classes:
+            return None
+        try:
+            import torch
+            from torchvision import transforms
+            if self._preprocess is None:
+                self._preprocess = transforms.Compose([
+                    transforms.Resize(256),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
+                    ),
+                ])
+            with torch.no_grad():
+                x = self._preprocess(image.convert("RGB")).unsqueeze(0)
+                out = torch.softmax(self._custom_model(x), dim=1).squeeze(0)
+            return {self.classes[i]: float(out[i]) for i in range(len(self.classes))}
+        except Exception as e:  # pragma: no cover
+            logger.debug("Custom scene model inference failed: %s", e)
+            return None
+
     def classify(self, image, detections: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Return normalized scene prediction dict.
 
@@ -295,6 +320,18 @@ class SceneClassifier:
             image: PIL image
             detections: optional YOLO detections [{label, confidence}]
         """
+        # 1) User-trained model has priority — BG Training output
+        custom = self._custom_predict(image)
+        if custom:
+            ranked = sorted(custom.items(), key=lambda kv: kv[1], reverse=True)
+            top_label, top_conf = ranked[0]
+            return {
+                "scene": top_label,
+                "confidence": top_conf,
+                "top": [{"label": k, "confidence": v} for k, v in ranked[:5]],
+                "scores": dict(ranked),
+            }
+
         scores: Dict[str, float] = {}
         detections = detections or []
 

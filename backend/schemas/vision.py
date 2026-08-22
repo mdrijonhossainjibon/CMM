@@ -78,25 +78,23 @@ class VisionModelInfo(BaseModel):
     scene_classes: List[str]
 
 
-class SceneTrainStartRequest(BaseModel):
-    epochs: int = 30
+
+
+class BgTrainStartRequest(BaseModel):
+    epochs: int = 25
     batch_size: int = 32
     image_size: int = 224
     workers: int = 4
 
 
-class SceneTrainStartResponse(BaseModel):
+class BgTrainStartResponse(BaseModel):
     success: bool
     message: Optional[str] = None
     error: Optional[str] = None
-    session_id: Optional[str] = None
 
 
-class SceneTrainStatusResponse(BaseModel):
+class BgTrainStatusResponse(BaseModel):
     running: bool
     status: str
     progress: int = 0
-    gpu_util: Optional[int] = None
-    gpu_mem_used: Optional[int] = None
-    gpu_mem_total: Optional[int] = None
-    gpu_temperature: Optional[int] = None
+    elapsed_seconds: Optional[float] = None

@@ -1,8 +1,6 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException
 from typing import List, Optional
 import os
-import shutil
-import time
 
 from backend.core.config import settings
 from backend.schemas.vision import (
@@ -14,18 +12,16 @@ from backend.schemas.vision import (
     VisionModelInfo,
     ObjectPrediction,
     ScenePrediction,
-    SceneTrainStartRequest,
-    SceneTrainStartResponse,
-    SceneTrainStatusResponse,
+    BgTrainStartRequest,
+    BgTrainStartResponse,
+    BgTrainStatusResponse,
 )
 from backend.vision import pipeline
+from backend.services.bg_training_service import bg_training_service
 from backend.vision.scene import SCENE_CLASSES
 from backend.vision.dependencies import get_detector, get_scene_classifier, get_segmenter
-from backend.services.scene_training_service import SceneTrainingService
 
 router = APIRouter(prefix="/api", tags=["Vision"])
-
-_scene_train_service = SceneTrainingService()
 
 
 @router.post("/analyze", response_model=VisionAnalysis)
@@ -136,111 +132,25 @@ async def export_onnx():
 
 
 # ------------------------------------------------------------------
-# Scene Classifier Training
+# BG (background) classifier training
 # ------------------------------------------------------------------
 
-@router.get("/vision/scene-classes", response_model=List[str])
-async def list_scene_classes():
-    root = settings.SCENE_DATASET_DIR
-    if not os.path.isdir(root):
-        return []
-    classes = sorted([d.name for d in os.scandir(root) if d.is_dir()])
-    return classes
-
-
-@router.get("/vision/scene-dataset-stats")
-async def scene_dataset_stats():
-    root = settings.SCENE_DATASET_DIR
-    stats = []
-    total = 0
-    if os.path.isdir(root):
-        for cls_dir in sorted(os.scandir(root), key=lambda e: e.name.lower()):
-            if not cls_dir.is_dir():
-                continue
-            count = sum(1 for f in os.scandir(cls_dir.path) if f.is_file() and os.path.splitext(f.name)[1].lower() in (".jpg", ".jpeg", ".png", ".webp", ".bmp"))
-            stats.append({"class": cls_dir.name, "count": count})
-            total += count
-    return {"classes": stats, "total_images": total}
-
-
-@router.post("/vision/scene-upload")
-async def upload_scene_images(files: List[UploadFile] = File(...), class_name: str = Form(...)):
-    if not class_name.strip():
-        raise HTTPException(status_code=400, detail="Class name is required")
-    safe_class = class_name.strip().lower().replace(" ", "_")
-    target_dir = os.path.join(settings.SCENE_DATASET_DIR, safe_class)
-    os.makedirs(target_dir, exist_ok=True)
-
-    saved = []
-    errors = []
-    base_ts = int(time.time() * 1000)
-    for idx, f in enumerate(files):
-        try:
-            ext = os.path.splitext(f.filename or "image.jpg")[1] or ".jpg"
-            filename = f"{safe_class}_{base_ts}_{idx}{ext}"
-            filepath = os.path.join(target_dir, filename)
-            content = f.file.read()
-            if len(content) > 50 * 1024 * 1024:
-                raise ValueError("File too large (max 50MB)")
-            with open(filepath, "wb") as out:
-                out.write(content)
-            saved.append(filename)
-        except Exception as e:
-            errors.append(f"{f.filename}: {str(e)}")
-
-    return {"success": len(errors) == 0, "saved_count": len(saved), "error_count": len(errors), "saved_files": saved, "errors": errors}
-
-
-@router.delete("/vision/scene-class/{class_name}")
-async def delete_scene_class(class_name: str):
-    target = os.path.join(settings.SCENE_DATASET_DIR, class_name)
-    if not os.path.isdir(target):
-        raise HTTPException(status_code=404, detail="Class not found")
-    count = 0
-    for f in os.listdir(target):
-        fp = os.path.join(target, f)
-        if os.path.isfile(fp):
-            os.remove(fp)
-            count += 1
+@router.post("/vision/bg-train", response_model=BgTrainStartResponse)
+async def start_bg_training(req: BgTrainStartRequest):
+    if bg_training_service.is_running():
+        return BgTrainStartResponse(success=False, error="BG training is already in progress")
     try:
-        os.rmdir(target)
-    except OSError:
-        pass
-    return {"success": True, "deleted_count": count, "class": class_name}
-
-
-@router.post("/vision/scene-train", response_model=SceneTrainStartResponse)
-async def start_scene_training(req: SceneTrainStartRequest):
-    if _scene_train_service.is_running():
-        return SceneTrainStartResponse(success=False, error="Scene training is already in progress")
-    try:
-        session_id = None
-        try:
-            from backend.services.log_service import log_service
-            session_id = await log_service.create_session(
-                training_type="scene",
-                epochs=req.epochs,
-                batch_size=req.batch_size,
-                image_size=req.image_size,
-                workers=req.workers,
-                selected_classes=[],
-            )
-        except Exception:
-            session_id = None
-
-        _scene_train_service.start_training(
+        bg_training_service.start_training(
             epochs=req.epochs,
             batch_size=req.batch_size,
             image_size=req.image_size,
             workers=req.workers,
-            session_id=session_id,
         )
-        return SceneTrainStartResponse(success=True, message="Scene training started", session_id=session_id)
+        return BgTrainStartResponse(success=True, message="BG training started")
     except Exception as e:
-        return SceneTrainStartResponse(success=False, error=str(e))
+        return BgTrainStartResponse(success=False, error=str(e))
 
 
-@router.get("/vision/scene-train/status", response_model=SceneTrainStatusResponse)
-async def get_scene_training_status():
-    status = _scene_train_service.get_status()
-    return SceneTrainStatusResponse(**status)
+@router.get("/vision/bg-train/status", response_model=BgTrainStatusResponse)
+async def get_bg_training_status():
+    return BgTrainStatusResponse(**bg_training_service.get_status())

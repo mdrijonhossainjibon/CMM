@@ -65,11 +65,11 @@ class Settings(BaseSettings):
     }
 
     # Scene Classifier
-    SCENE_DATASET_DIR: str = "datasets/scenes"
     SCENE_MODEL_PATH: str = "backend/vision/models/scene_efficientnet.pt"
     SCENE_CLASSES_PATH: str = "backend/vision/models/scene_classes.json"
-    SCENE_TRAIN_SCRIPT_PATH: str = "backend/vision/train_scene.py"
-    SCENE_PROGRESS_FILE_PATH: str = "runs/scene_train_progress.txt"
+    BG_DATASET_DIR: str = "datasets/backgrounds"
+    BG_TRAIN_SCRIPT_PATH: str = "backend/vision/train_bg.py"
+    BG_PROGRESS_FILE_PATH: str = "runs/bg_train_progress.txt"
 
     # Security
     RATE_LIMIT_PER_MINUTE: int = 300

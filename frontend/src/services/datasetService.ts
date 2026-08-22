@@ -57,13 +57,22 @@ export async function deleteDatasetClass(type: string, className: string) {
 // ZIP Dataset Upload & Management
 // ---------------------------------------------------------------------------
 
-export async function uploadZipDataset(file: File, className?: string): Promise<ZipDatasetResponse> {
+export async function uploadZipDataset(
+  file: File,
+  className?: string,
+  onProgress?: (percent: number, loadedBytes: number) => void,
+): Promise<ZipDatasetResponse> {
   const formData = new FormData();
   formData.append('file', file);
   if (className?.trim()) formData.append('class_name', className.trim());
   const res = await client.post<ZipDatasetResponse>('/datasets/zip/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 0, // large ZIPs allowed
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) {
+        onProgress(Math.min(Math.round((e.loaded / e.total) * 100), 100), e.loaded);
+      }
+    },
   });
   return res.data;
 }

@@ -10,9 +10,11 @@ const SIDEBAR_COLLAPSED_WIDTH = '70px';
 const navItems: { to: string; label: string; icon: IconName }[] = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/detection', label: 'Detection', icon: 'detection' },
-  { to: '/scene-training', label: 'Scene Training', icon: 'brain' },
   { to: '/training', label: 'Training', icon: 'training' },
   { to: '/dataset-upload', label: 'Dataset Upload', icon: 'box' },
+  { to: '/split', label: 'Data Splitter', icon: 'detection' },
+  { to: '/bg-training', label: 'BG Training', icon: 'brain' },
+  { to: '/detector', label: 'Detector Test', icon: 'detectionCount' },
   { to: '/models', label: 'Models', icon: 'models' },
   { to: '/analytics', label: 'Analytics', icon: 'analytics' },
   { to: '/datasets', label: 'Datasets', icon: 'datasets' },

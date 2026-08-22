@@ -47,6 +47,10 @@ export default function ZipDatasets() {
   const [file, setFile] = useState<File | null>(null);
   const [className, setClassName] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploadedBytes, setUploadedBytes] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0); // bytes/sec
+  const uploadStartRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -114,8 +118,17 @@ export default function ZipDatasets() {
       return;
     }
     setUploading(true);
+    setUploadPct(0);
+    setUploadedBytes(0);
+    setUploadSpeed(0);
+    uploadStartRef.current = Date.now();
     try {
-      const res = await uploadZipDataset(file, className);
+      const res = await uploadZipDataset(file, className, (pct, loaded) => {
+        setUploadPct(pct);
+        setUploadedBytes(loaded);
+        const secs = (Date.now() - uploadStartRef.current) / 1000;
+        if (secs > 0.5) setUploadSpeed(loaded / secs);
+      });
       toast.success(`Dataset "${res.dataset.datasetId}" uploaded! ${res.dataset.totalImages} images across ${res.dataset.totalClasses} classes`);
       setFile(null);
       setClassName('');
@@ -329,6 +342,36 @@ export default function ZipDatasets() {
               </div>
             </div>
 
+            {uploading && (
+              <div className="mt-4 rounded-xl bg-dark-surface/70 border border-dark-border p-3">
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="text-dark-heading font-medium">
+                    {uploadPct < 100 ? 'Uploading…' : 'Processing on server…'}
+                  </span>
+                  <span className="text-dark-text">
+                    {formatBytes(uploadedBytes)} / {file ? formatBytes(file.size) : ''}
+                    {uploadPct < 100 && uploadSpeed > 0 && (
+                      <> · {formatBytes(uploadSpeed)}/s{file && uploadSpeed > 0 ? ` · ETA ${Math.max(Math.ceil(((file.size - uploadedBytes) / uploadSpeed) / 1000), 0)}s` : ''}</>
+                    )}
+                  </span>
+                  <span className="text-primary font-semibold">{uploadPct}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-dark-surface overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${uploadPct}%` }}
+                    transition={{ duration: 0.2 }}
+                    className={`h-full rounded-full ${uploadPct < 100 ? 'bg-primary' : 'bg-yellow-400'} ${uploadPct < 100 ? '' : 'animate-pulse'}`}
+                  />
+                </div>
+                <p className="text-[10px] text-dark-text/60 mt-1.5">
+                  {uploadPct < 100
+                    ? 'Upload cholche — page band korben na'
+                    : 'Upload complete! Server e extract & scan hocche…'}
+                </p>
+              </div>
+            )}
+
             <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <button
                 onClick={handleUpload}
@@ -336,7 +379,7 @@ export default function ZipDatasets() {
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="upload" className={`w-4 h-4 ${uploading ? 'animate-bounce' : ''}`} />
-                {uploading ? 'Processing...' : 'Upload & Process Dataset'}
+                {uploading ? (uploadPct < 100 ? `Uploading ${uploadPct}%` : 'Processing...') : 'Upload & Process Dataset'}
               </button>
               <p className="text-xs text-dark-text">
                 {uploading ? 'Extracting, scanning & building metadata…' : 'Files are validated, extracted and indexed automatically.'}
