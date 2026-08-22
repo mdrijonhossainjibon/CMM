@@ -30,7 +30,24 @@ def _get_model_classes(model_path: str) -> list[str]:
             return names
         return []
     except Exception:
-        return []
+        pass
+    # Non-YOLO models (e.g. EfficientNet scene weights) keep their classes
+    # in a sibling scene_classes.json written by BG Training.
+    import json
+    stem = os.path.splitext(os.path.basename(model_path))[0]
+    for sidecar_name in ("scene_classes.json", f"{stem}_classes.json"):
+        sidecar = os.path.join(os.path.dirname(model_path), sidecar_name)
+        if not os.path.exists(sidecar):
+            continue
+        try:
+            with open(sidecar, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            classes = payload.get("classes")
+            if isinstance(classes, list) and classes:
+                return [str(c) for c in classes]
+        except (json.JSONDecodeError, OSError):
+            continue
+    return []
 
 
 def _is_system_path(norm_path: str) -> bool:

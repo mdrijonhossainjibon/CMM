@@ -195,6 +195,14 @@ def train_bg():
         json.dump({"classes": classes, "num_classes": len(classes), "image_size": image_size}, f, indent=2)
     logger.info("Saved BG classes: %s", classes_path)
 
+    # Copy to exports/ (with class sidecar) so it shows on the Exports page
+    import shutil
+    exports_dir = Path("exports")
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(model_path, exports_dir / "bg_scene_model.pt")
+    shutil.copy2(classes_path, exports_dir / "bg_scene_model_classes.json")
+    logger.info("Exported BG model to exports/bg_scene_model.pt")
+
     print(f"BG_TRAIN_DONE: model={model_path} classes={classes_path} acc={best_acc:.4f}")
 
 

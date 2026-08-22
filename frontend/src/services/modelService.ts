@@ -1,4 +1,4 @@
-import client from './apiClient';
+import client, { getAssetUrl } from './apiClient';
 import type { ModelListResponse, ModelInfoResponse, ExportsResponse } from '../types';
 
 export async function listModels(): Promise<ModelListResponse> {
@@ -21,19 +21,17 @@ export async function deleteModel(path: string): Promise<{ success: boolean; del
 }
 
 export async function downloadModel(path: string): Promise<void> {
-  const res = await client.get(`/models/download/${path}`, {
-    responseType: 'blob',
-    timeout: 60000,
-  });
-  const url = window.URL.createObjectURL(new Blob([res.data]));
+  // Direct link (no axios/blob) — big .pt files stream properly and no
+  // blob-URL quirks in embedded browsers.
+  const url = getAssetUrl(`models/download/${path}`);
   const link = document.createElement('a');
   link.href = url;
   const filename = path.split('/').pop() || 'model.pt';
   link.setAttribute('download', filename);
+  link.rel = 'noopener';
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.URL.revokeObjectURL(url);
 }
 
 export async function reloadModel(): Promise<void> {
