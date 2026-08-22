@@ -203,6 +203,26 @@ def train_bg():
     shutil.copy2(classes_path, exports_dir / "bg_scene_model_classes.json")
     logger.info("Exported BG model to exports/bg_scene_model.pt")
 
+    # ONNX export (dynamic batch) for edge/browser inference
+    try:
+        model.load_state_dict(best_state)
+        model.to("cpu").eval()
+        onnx_path = out_dir / "scene_efficientnet.onnx"
+        dummy = torch.randn(1, 3, image_size, image_size)
+        torch.onnx.export(
+            model,
+            dummy,
+            str(onnx_path),
+            input_names=["image"],
+            output_names=["probs"],
+            dynamic_axes={"image": {0: "batch"}, "probs": {0: "batch"}},
+            opset_version=13,
+        )
+        shutil.copy2(onnx_path, exports_dir / "bg_scene_model.onnx")
+        logger.info("Exported ONNX: %s + exports/bg_scene_model.onnx", onnx_path)
+    except Exception as e:
+        logger.warning("ONNX export failed (pt thik e save hoyeche): %s", e)
+
     print(f"BG_TRAIN_DONE: model={model_path} classes={classes_path} acc={best_acc:.4f}")
 
 
