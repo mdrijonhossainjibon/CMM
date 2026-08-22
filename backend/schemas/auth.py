@@ -36,3 +36,8 @@ class AdminUserListItem(BaseModel):
 
 class AdminDeleteUserRequest(BaseModel):
     username: str
+
+
+class AdminChangePasswordRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=50)
+    new_password: str = Field(..., min_length=6, max_length=100)

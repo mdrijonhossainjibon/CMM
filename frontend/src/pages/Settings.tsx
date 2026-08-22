@@ -6,11 +6,9 @@ import toast from 'react-hot-toast';
 
 export default function Settings() {
   const [r2Enabled, setR2Enabled] = useState(false);
-  const [r2Endpoint, setR2Endpoint] = useState('');
-  const [r2AccessKey, setR2AccessKey] = useState('');
-  const [r2SecretKey, setR2SecretKey] = useState('');
+  const [r2ApiKey, setR2ApiKey] = useState('');
+  const [r2BaseUrl, setR2BaseUrl] = useState('');
   const [r2Bucket, setR2Bucket] = useState('captchamaster');
-  const [r2Region, setR2Region] = useState('auto');
   const [r2Saving, setR2Saving] = useState(false);
   const [r2Testing, setR2Testing] = useState(false);
   const [r2Status, setR2Status] = useState<'idle' | 'connected' | 'error'>('idle');
@@ -21,11 +19,10 @@ export default function Settings() {
     try {
       const config = await settingsService.getR2Config();
       setR2Enabled(config.r2_enabled);
-      setR2Endpoint(config.r2_endpoint_url);
-      setR2AccessKey(config.r2_access_key_id);
+      setR2ApiKey(config.r2_api_key);
+      setR2BaseUrl(config.r2_base_url);
       setR2Bucket(config.r2_bucket_name);
-      setR2Region(config.r2_region);
-      if (config.r2_enabled && config.r2_endpoint_url) {
+      if (config.r2_enabled && config.r2_api_key) {
         setR2Status('connected');
         fetchR2Usage();
       }
@@ -57,16 +54,13 @@ export default function Settings() {
     try {
       const res = await settingsService.saveR2Config({
         r2_enabled: r2Enabled,
-        r2_endpoint_url: r2Endpoint,
-        r2_access_key_id: r2AccessKey,
-        r2_secret_access_key: r2SecretKey,
+        r2_api_key: r2ApiKey,
+        r2_base_url: r2BaseUrl,
         r2_bucket_name: r2Bucket,
-        r2_region: r2Region,
       });
       if (res.success) {
         toast.success('R2 configuration saved to server');
         setR2Status(r2Enabled ? 'connected' : 'idle');
-        setR2SecretKey('');
         if (r2Enabled) fetchR2Usage();
       }
     } catch (e: any) {
@@ -77,21 +71,19 @@ export default function Settings() {
   };
 
   const handleR2Test = async () => {
-    if (!r2Endpoint || !r2AccessKey || !r2SecretKey) {
-      toast.error('Fill in endpoint, access key, and secret key first');
+    if (!r2ApiKey) {
+      toast.error('Fill in API key first');
       return;
     }
     setR2Testing(true);
     try {
       const res = await settingsService.testR2Connection({
-        r2_endpoint_url: r2Endpoint,
-        r2_access_key_id: r2AccessKey,
-        r2_secret_access_key: r2SecretKey,
+        r2_api_key: r2ApiKey,
+        r2_base_url: r2BaseUrl,
         r2_bucket_name: r2Bucket,
-        r2_region: r2Region,
       });
       if (res.success) {
-        toast.success(res.message || 'Connection successful!');
+        toast.success(res.message || 'Connection test passed!');
         setR2Status('connected');
         fetchR2Usage();
       }
@@ -171,13 +163,11 @@ export default function Settings() {
             <div className="bg-dark-surface/50 border border-dark-border rounded-lg p-3 mb-4">
               <h3 className="text-xs font-semibold text-dark-heading mb-2">Credentials kothay paben?</h3>
               <ol className="text-xs text-dark-text space-y-1 list-decimal list-inside">
-                <li><a href="https://dash.cloudflare.com" target="_blank" className="text-primary hover:underline">dash.cloudflare.com</a> → login → left sidebar e <strong>R2</strong></li>
-                <li><strong>Create Bucket</strong> → bucket name (e.g. <code className="text-primary bg-dark-surface px-1 rounded">captchamaster</code>)</li>
-                <li>Top right → <strong>Manage R2 API Tokens</strong> → <strong>Create API Token</strong></li>
-                <li>Permission: <strong>Object Read & Write</strong> → Create</li>
-                <li><strong>Access Key ID</strong> + <strong>Secret Access Key</strong> copy koren (Secret ekbar e dekhabe!)</li>
-                <li><strong>Endpoint URL:</strong> <code className="text-primary bg-dark-surface px-1 rounded">https://&lt;account-id&gt;.r2.cloudflarestorage.com</code></li>
-                <li>Account ID: R2 page er URL theke → <code className="text-primary bg-dark-surface px-1 rounded">dash.cloudflare.com/###/r2</code></li>
+                <li>Apnar R2 Storage Platform dashboard login koren</li>
+                <li><strong>API Keys</strong> → <strong>Create API Key</strong> (storage read/write scope)</li>
+                <li>Generated <strong>API key</strong> (e.g. <code className="text-primary bg-dark-surface px-1 rounded">r2_...</code>) ekhane den</li>
+                <li><strong>Base URL:</strong> platform API address — default: <code className="text-primary bg-dark-surface px-1 rounded">https://cloud.captchamaster.org/api</code></li>
+                <li><strong>Bucket Name:</strong> data ja bucket e save hobe (nai thakle auto-create hobe)</li>
               </ol>
             </div>
 
@@ -199,40 +189,27 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="block text-sm text-dark-heading mb-1">Endpoint URL</label>
+                <label className="block text-sm text-dark-heading mb-1">API Key</label>
                 <input
-                  type="text"
-                  value={r2Endpoint}
-                  onChange={(e) => setR2Endpoint(e.target.value)}
-                  placeholder="https://<account-id>.r2.cloudflarestorage.com"
+                  type="password"
+                  value={r2ApiKey}
+                  onChange={(e) => setR2ApiKey(e.target.value)}
+                  placeholder="r2_..."
                   className="w-full px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-dark-heading mb-1">Access Key ID</label>
+                  <label className="block text-sm text-dark-heading mb-1">Base URL</label>
                   <input
                     type="text"
-                    value={r2AccessKey}
-                    onChange={(e) => setR2AccessKey(e.target.value)}
-                    placeholder="R2 API Token → Access Key ID"
+                    value={r2BaseUrl}
+                    onChange={(e) => setR2BaseUrl(e.target.value)}
+                    placeholder="https://cloud.captchamaster.org/api"
                     className="w-full px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm text-dark-heading mb-1">Secret Access Key</label>
-                  <input
-                    type="password"
-                    value={r2SecretKey}
-                    onChange={(e) => setR2SecretKey(e.target.value)}
-                    placeholder="R2 API Token → Secret Key"
-                    className="w-full px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-dark-heading mb-1">Bucket Name</label>
                   <input
@@ -240,16 +217,6 @@ export default function Settings() {
                     value={r2Bucket}
                     onChange={(e) => setR2Bucket(e.target.value)}
                     placeholder="captchamaster"
-                    className="w-full px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-dark-heading mb-1">Region</label>
-                  <input
-                    type="text"
-                    value={r2Region}
-                    onChange={(e) => setR2Region(e.target.value)}
-                    placeholder="auto"
                     className="w-full px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
                   />
                 </div>
@@ -275,9 +242,9 @@ export default function Settings() {
 
               <div className="border-t border-dark-border pt-3 mt-2">
                 <p className="text-xs text-dark-text">
-                  Training complete hole model auto R2 te upload hoy. Data Sync er jonno{' '}
-                  <code className="text-primary bg-dark-surface px-1 py-0.5 rounded text-xs">POST /api/r2/push/training-data</code>{' '}
-                  and <code className="text-primary bg-dark-surface px-1 py-0.5 rounded text-xs">POST /api/r2/pull/training-data</code> use korte paren.
+                  R2 sync ekhon direct frontend theke chole (AWS S3 SDK). Data Upload / Training
+                  page er <strong>Push to R2</strong> and <strong>Sync from R2</strong> buttons theke
+                  training data sync kora jay — backend bypass hoye Cloudflare R2 te jay.
                 </p>
               </div>
             </div>

@@ -24,6 +24,10 @@ def _get_model_path(model_type: str) -> str:
     return _model_paths.get(model_type, _active_model_path)
 
 
+def get_model_path_for_type(model_type: str) -> str:
+    return _get_model_path(model_type)
+
+
 def set_active_model(path: str):
     global _active_model_path, _detectors
     _active_model_path = path
@@ -63,3 +67,32 @@ def reload_detector_instance():
     global _detectors
     _detectors.clear()
     return get_default_detector()
+
+
+def reload_all_models() -> dict:
+    """Clear detector cache and warm-load all available model types.
+
+    Training complete hole call kora hoy jate notun trained model gulo
+    cache e load hoye ready thake — next detection instant hobe.
+    """
+    global _detectors, _detector_mtimes
+    _detectors.clear()
+    _detector_mtimes.clear()
+
+    report: dict = {}
+    all_types = {"auto": _active_model_path, **_model_paths}
+    for model_type, path in all_types.items():
+        entry: dict = {"path": path}
+        if os.path.exists(path) and path.endswith(".pt"):
+            try:
+                get_detector(model_type)
+                entry["loaded"] = True
+                entry["available"] = True
+            except Exception:
+                entry["loaded"] = False
+                entry["available"] = True
+        else:
+            entry["loaded"] = False
+            entry["available"] = False
+        report[model_type] = entry
+    return report

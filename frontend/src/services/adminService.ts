@@ -28,6 +28,16 @@ export async function deleteAdmin(username: string) {
   return res.data;
 }
 
+export async function changePassword(username: string, newPassword: string) {
+  const res = await client.post('/auth/admin/change-password', {
+    username,
+    new_password: newPassword,
+  }, {
+    timeout: 10000,
+  });
+  return res.data;
+}
+
 export async function getStats(): Promise<AdminStatsResponse> {
   const res = await client.get<AdminStatsResponse>('/admin/stats', {
     timeout: 10000,

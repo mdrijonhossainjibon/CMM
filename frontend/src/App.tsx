@@ -6,8 +6,9 @@ import Connect from './pages/Connect';
 import Dashboard from './pages/Dashboard';
 import Detection from './pages/Detection';
 import Training from './pages/Training';
-import DataUpload from './pages/DataUpload';
+import ZipDatasets from './pages/ZipDatasets';
 import Models from './pages/Models';
+import SceneTraining from './pages/SceneTraining';
 import Analytics from './pages/Analytics';
 import Datasets from './pages/Datasets';
 import Logs from './pages/Logs';
@@ -43,8 +44,9 @@ function AppRoutes() {
         >
           <Route index element={<Dashboard />} />
           <Route path="detection" element={<Detection />} />
+          <Route path="scene-training" element={<SceneTraining />} />
           <Route path="training" element={<Training />} />
-          <Route path="data-upload" element={<DataUpload />} />
+          <Route path="dataset-upload" element={<ZipDatasets />} />
           <Route path="models" element={<Models />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="datasets" element={<Datasets />} />

@@ -2,10 +2,9 @@ import client from './apiClient';
 
 export interface R2Config {
   r2_enabled: boolean;
-  r2_endpoint_url: string;
-  r2_access_key_id: string;
+  r2_api_key: string;
+  r2_base_url: string;
   r2_bucket_name: string;
-  r2_region: string;
 }
 
 export interface R2ConfigResponse {
@@ -29,28 +28,44 @@ export const settingsService = {
   },
 
   getR2Status: async (): Promise<{ enabled: boolean; configured: boolean; bucket: string; endpoint: string; stats: R2Stats }> => {
-    const res = await client.get<{ enabled: boolean; configured: boolean; bucket: string; endpoint: string; stats: R2Stats }>('/r2/status');
-    return res.data;
+    try {
+      const { createStorageClient, resolveBucket, isR2Configured } = await import('./r2Client');
+      const { storage, cfg } = await createStorageClient();
+      const bucket = await resolveBucket(storage, cfg.r2_bucket_name || 'captchamaster');
+      const stats = await storage.bucket.getStats(bucket.id);
+      const totalBytes = typeof stats.storageUsed === 'number' ? stats.storageUsed : Number(stats.storageUsed) || 0;
+      return {
+        enabled: isR2Configured(cfg),
+        configured: isR2Configured(cfg),
+        bucket: cfg.r2_bucket_name,
+        endpoint: cfg.r2_base_url,
+        stats: {
+          objects: stats.fileCount,
+          total_size_bytes: totalBytes,
+          total_size_mb: Math.round((totalBytes / (1024 * 1024)) * 100) / 100,
+          total_size_gb: Math.round((totalBytes / (1024 * 1024 * 1024)) * 100) / 100,
+          by_prefix: { root: { objects: stats.fileCount, size_mb: Math.round((totalBytes / (1024 * 1024)) * 100) / 100 } },
+        },
+      };
+    } catch {
+      return { enabled: false, configured: false, bucket: '', endpoint: '', stats: { objects: 0, total_size_bytes: 0, total_size_mb: 0, total_size_gb: 0, by_prefix: {} } };
+    }
   },
 
   saveR2Config: async (config: {
     r2_enabled: boolean;
-    r2_endpoint_url: string;
-    r2_access_key_id: string;
-    r2_secret_access_key: string;
+    r2_api_key: string;
+    r2_base_url: string;
     r2_bucket_name: string;
-    r2_region: string;
   }): Promise<R2ConfigResponse> => {
     const res = await client.put<R2ConfigResponse>('/settings/r2', config);
     return res.data;
   },
 
   testR2Connection: async (config: {
-    r2_endpoint_url: string;
-    r2_access_key_id: string;
-    r2_secret_access_key: string;
+    r2_api_key: string;
+    r2_base_url: string;
     r2_bucket_name: string;
-    r2_region: string;
   }): Promise<{ success: boolean; message: string }> => {
     const res = await client.post<{ success: boolean; message: string }>('/settings/r2/test', config);
     return res.data;

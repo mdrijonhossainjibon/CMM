@@ -1,10 +1,11 @@
 import os
 import time
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Form
 from fastapi.responses import JSONResponse, FileResponse
 
 from backend.core.config import settings
-from backend.utils.validators import validate_image_file, validate_file_size
+from backend.utils.validators import validate_image_file, validate_file_size, validate_archive_file
+from backend.services import dataset_service as ds
 
 router = APIRouter(prefix="/api/datasets", tags=["Datasets"])
 
@@ -188,3 +189,91 @@ def _clear_dataset_caches():
                     os.remove(os.path.join(root, f))
                 except OSError:
                     pass
+
+
+# ---------------------------------------------------------------------------
+# ZIP Dataset Upload & Management
+# ---------------------------------------------------------------------------
+
+
+@router.post("/zip/upload")
+async def upload_zip_dataset(
+    file: UploadFile = File(...),
+    class_name: str = Form(None),
+):
+    """Upload a single ZIP. Top-level folders -> class labels."""
+    validate_archive_file(file)
+    content = await file.read()
+    try:
+        metadata = ds.create_dataset(content, file.filename or "dataset.zip", class_name)
+        return {"success": True, "dataset": metadata}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process dataset: {str(e)}")
+
+
+@router.get("/zip/list")
+async def list_zip_datasets():
+    return JSONResponse({"success": True, "datasets": ds.list_datasets()})
+
+
+@router.get("/zip/detail")
+async def get_zip_dataset(dataset_id: str = Query(...)):
+    metadata = ds.load_metadata(dataset_id)
+    return {"success": True, "dataset": metadata}
+
+
+@router.get("/zip/{dataset_id}/image")
+async def serve_zip_image(dataset_id: str, file: str = Query(...), class_name: str = Query("")):
+    """Serve an image from a ZIP dataset's extracted storage.
+
+    Security: resolves the file inside the dataset's class folder and refuses
+    any path that escapes the dataset root (zip-slip protection on read).
+    """
+    root = os.path.realpath(os.path.join(settings.ZIP_TRAINING_DATA_DIR, dataset_id))
+    if not os.path.isdir(root):
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if class_name:
+        candidate = os.path.realpath(os.path.join(root, class_name, file))
+    else:
+        candidate = os.path.realpath(os.path.join(root, file))
+
+    if not candidate.startswith(root + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid image path")
+
+    if not os.path.isfile(candidate):
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return FileResponse(candidate)
+
+
+@router.get("/zip/training-records")
+async def get_zip_training_records(dataset_id: str = Query(...)):
+    ds.load_metadata(dataset_id)  # 404 if dataset missing
+    return {"success": True, "records": ds.training_records(dataset_id)}
+
+
+@router.delete("/zip/{dataset_id}")
+async def delete_zip_dataset(dataset_id: str):
+    return ds.delete_dataset(dataset_id)
+
+
+@router.post("/zip/{dataset_id}/rebuild")
+async def rebuild_zip_metadata(dataset_id: str):
+    try:
+        metadata = ds.build_metadata(dataset_id)
+        return {"success": True, "dataset": metadata}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rebuild metadata: {str(e)}")
+
+
+@router.get("/zip/{dataset_id}/backup")
+async def download_zip_backup(dataset_id: str):
+    backup = ds.backup_path(dataset_id)
+    if not os.path.isfile(backup):
+        raise HTTPException(status_code=404, detail=f"Backup ZIP for dataset '{dataset_id}' not found")
+    return FileResponse(backup, filename=f"{dataset_id}.zip", media_type="application/zip")

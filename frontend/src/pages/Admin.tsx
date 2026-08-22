@@ -5,7 +5,10 @@ import StatCard from '../components/common/StatCard';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { Icon } from '../components/common/Icons';
-import { getUsers, createAdmin, deleteAdmin, getStats, getGpuStatus, getStorageStatus } from '../services/adminService';
+import { getUsers, createAdmin, deleteAdmin, changePassword, getStats, getGpuStatus, getStorageStatus } from '../services/adminService';
+import Modal from '../components/common/Modal';
+import PasswordInput from '../components/common/PasswordInput';
+import { useAppSelector } from '../app/store';
 import toast from 'react-hot-toast';
 import type { AdminUserInfo, AdminStatsResponse, AdminGpuResponse, AdminStorageResponse } from '../types';
 
@@ -161,6 +164,8 @@ function GpuCpuPanel({ data }: { data: AdminGpuResponse }) {
 }
 
 export default function Admin() {
+  const { role: currentRole, username: currentUsername } = useAppSelector((state) => state.auth);
+  const isSuperAdmin = currentRole === 'super_admin';
   const [users, setUsers] = useState<AdminUserInfo[]>([]);
   const [stats, setStats] = useState<AdminStatsResponse | null>(null);
   const [gpu, setGpu] = useState<AdminGpuResponse | null>(null);
@@ -171,6 +176,10 @@ export default function Admin() {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [creating, setCreating] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [changePwTarget, setChangePwTarget] = useState<string | null>(null);
+  const [changePwValue, setChangePwValue] = useState('');
+  const [changingPw, setChangingPw] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -214,13 +223,14 @@ export default function Admin() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleCreateAdmin = async () => {
-    if (!newUsername.trim() || !newPassword) return;
+    if (!newUsername.trim() || newPassword.length < 6) return;
     setCreating(true);
     try {
       await createAdmin(newUsername.trim(), newPassword);
+      toast.success(`Admin "${newUsername.trim()}" created!`);
       setNewUsername('');
       setNewPassword('');
-      toast.success(`Admin "${newUsername.trim()}" created!`);
+      setCreateModalOpen(false);
       fetchData();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to create admin');
@@ -236,6 +246,21 @@ export default function Admin() {
       fetchData();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete user');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!changePwTarget || changePwValue.length < 6) return;
+    setChangingPw(true);
+    try {
+      await changePassword(changePwTarget, changePwValue);
+      toast.success(`Password changed for "${changePwTarget}"`);
+      setChangePwTarget(null);
+      setChangePwValue('');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to change password');
+    } finally {
+      setChangingPw(false);
     }
   };
 
@@ -275,63 +300,65 @@ export default function Admin() {
 
       {activeTab === 'users' && (
         <div className="space-y-4">
-          <GlassPanel>
-            <h3 className="text-sm font-medium text-dark-heading mb-4">Create Admin User</h3>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                placeholder="Username"
-                className="flex-1 px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
-              />
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Password"
-                className="flex-1 px-3 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
-              />
-              <button
-                onClick={handleCreateAdmin}
-                disabled={creating || !newUsername.trim() || !newPassword}
-                className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 whitespace-nowrap"
-              >
-                {creating ? 'Creating...' : 'Create Admin'}
-              </button>
-            </div>
-          </GlassPanel>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-dark-heading">Manage Users ({users.length})</h3>
+            <button
+              onClick={() => { setNewUsername(''); setNewPassword(''); setCreateModalOpen(true); }}
+              className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors flex items-center gap-1.5"
+            >
+              <Icon name="plus" className="w-4 h-4" />
+              Create Admin
+            </button>
+          </div>
 
           <GlassPanel>
-            <h3 className="text-sm font-medium text-dark-heading mb-4">Manage Users ({users.length})</h3>
             <div className="space-y-1">
-              {users.map((user) => (
-                <div key={user.username} className="flex items-center justify-between p-3 rounded-lg bg-dark-surface border border-dark-border">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold uppercase shrink-0">
-                      {user.username.charAt(0)}
+              {users.map((user) => {
+                const isSelf = user.username === currentUsername;
+                const canChangePw = isSuperAdmin && (isSelf || user.role !== 'super_admin');
+                const canDelete = user.role !== 'super_admin';
+                return (
+                  <div key={user.username} className="flex items-center justify-between p-3 rounded-lg bg-dark-surface border border-dark-border">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold uppercase shrink-0">
+                        {user.username.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-dark-heading truncate">
+                          {user.username}
+                          {isSelf && <span className="ml-2 text-[10px] text-primary/70">(you)</span>}
+                        </p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          user.role === 'super_admin' ? 'bg-amber-500/10 text-amber-400' :
+                          user.role === 'admin' ? 'bg-primary/10 text-primary' :
+                          'bg-dark-border text-dark-text'
+                        }`}>
+                          {user.role}
+                        </span>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-dark-heading truncate">{user.username}</p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                        user.role === 'super_admin' ? 'bg-amber-500/10 text-amber-400' :
-                        user.role === 'admin' ? 'bg-primary/10 text-primary' :
-                        'bg-dark-border text-dark-text'
-                      }`}>
-                        {user.role}
-                      </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {canChangePw && (
+                        <button
+                          onClick={() => { setChangePwTarget(user.username); setChangePwValue(''); }}
+                          className="px-3 py-1.5 rounded-lg text-xs text-primary hover:bg-primary/10 transition-colors flex items-center gap-1"
+                        >
+                          <Icon name="settings" className="w-3 h-3" />
+                          Change Password
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDeleteAdmin(user.username)}
+                          className="px-3 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </div>
-                  {user.role !== 'super_admin' && (
-                    <button
-                      onClick={() => handleDeleteAdmin(user.username)}
-                      className="px-3 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               {users.length === 0 && (
                 <p className="text-center text-dark-text/40 py-6 text-sm">No users found</p>
               )}
@@ -381,6 +408,98 @@ export default function Admin() {
           )}
         </GlassPanel>
       )}
+
+      <Modal
+        open={createModalOpen}
+        onClose={() => !creating && setCreateModalOpen(false)}
+        title="Create Admin"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs text-dark-text mb-1">Username</label>
+            <input
+              type="text"
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              placeholder="Enter username"
+              className="w-full px-3 py-2.5 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-sm focus:outline-none focus:border-primary"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-dark-text mb-1">Password</label>
+            <PasswordInput
+              value={newPassword}
+              onChange={setNewPassword}
+              placeholder="Minimum 6 characters"
+              onEnter={handleCreateAdmin}
+            />
+            <p className={`text-[10px] mt-1 ${newPassword && newPassword.length < 6 ? 'text-red-400' : 'text-dark-text/50'}`}>
+              {newPassword && newPassword.length < 6 ? 'Password must be at least 6 characters' : 'This user will be created with the admin role'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleCreateAdmin}
+              disabled={creating || !newUsername.trim() || newPassword.length < 6}
+              className="flex-1 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-all disabled:opacity-50"
+            >
+              {creating ? 'Creating...' : 'Create Admin'}
+            </button>
+            <button
+              onClick={() => setCreateModalOpen(false)}
+              disabled={creating}
+              className="px-4 py-2.5 rounded-lg border border-dark-border text-dark-text text-sm hover:bg-dark-surface transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!changePwTarget}
+        onClose={() => !changingPw && setChangePwTarget(null)}
+        title="Change Password"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-dark-text">
+            Set a new password for{' '}
+            <span className="text-dark-heading font-medium">{changePwTarget}</span>
+          </p>
+          <div>
+            <label className="block text-xs text-dark-text mb-1">New Password</label>
+            <PasswordInput
+              value={changePwValue}
+              onChange={setChangePwValue}
+              placeholder="Minimum 6 characters"
+              autoFocus
+              onEnter={handleChangePassword}
+            />
+            <p className={`text-[10px] mt-1 ${changePwValue && changePwValue.length < 6 ? 'text-red-400' : 'text-dark-text/50'}`}>
+              {changePwValue && changePwValue.length < 6 ? 'Password must be at least 6 characters' : 'Use a strong, unique password'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleChangePassword}
+              disabled={changingPw || changePwValue.length < 6}
+              className="flex-1 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-all disabled:opacity-50"
+            >
+              {changingPw ? 'Saving...' : 'Change Password'}
+            </button>
+            <button
+              onClick={() => setChangePwTarget(null)}
+              disabled={changingPw}
+              className="px-4 py-2.5 rounded-lg border border-dark-border text-dark-text text-sm hover:bg-dark-surface transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

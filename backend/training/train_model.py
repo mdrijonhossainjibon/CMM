@@ -121,53 +121,8 @@ def _safe_copy_file(src: Path, dst: str):
 
 
 def _upload_to_r2(local_path: str, r2_key: str):
-    try:
-        cfg = _get_r2_config_from_db()
-        if not cfg or not cfg.get("r2_enabled") or not cfg.get("r2_endpoint_url"):
-            logger.debug("R2 not configured — skipping upload for %s", r2_key)
-            return
-
-        import boto3
-        from botocore.config import Config
-
-        client = boto3.client(
-            "s3",
-            endpoint_url=cfg["r2_endpoint_url"],
-            aws_access_key_id=cfg["r2_access_key_id"],
-            aws_secret_access_key=cfg["r2_secret_access_key"],
-            config=Config(region_name=cfg.get("r2_region", "auto"), signature_version="s3v4"),
-        )
-        client.upload_file(local_path, cfg.get("r2_bucket_name", "captchamaster"), r2_key)
-        logger.info("R2 upload complete: %s", r2_key)
-    except Exception as e:
-        logger.warning("R2 upload skipped [%s]: %s", r2_key, e)
-
-
-def _get_r2_config_from_db() -> dict | None:
-    try:
-        from pymongo import MongoClient
-
-        mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
-        db_name = os.environ.get("MONGODB_DB_NAME", "captchamaster")
-
-        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=3000)
-        db = client[db_name]
-        doc = db["app_settings"].find_one({"_id": "app_config"})
-        client.close()
-
-        if not doc:
-            return None
-        return {
-            "r2_enabled": doc.get("r2_enabled", False),
-            "r2_endpoint_url": doc.get("r2_endpoint_url", ""),
-            "r2_access_key_id": doc.get("r2_access_key_id", ""),
-            "r2_secret_access_key": doc.get("r2_secret_access_key", ""),
-            "r2_bucket_name": doc.get("r2_bucket_name", "captchamaster"),
-            "r2_region": doc.get("r2_region", "auto"),
-        }
-    except Exception as e:
-        logger.debug("Could not read R2 config from MongoDB: %s", e)
-        return None
+    """(Removed) R2 upload handled by frontend SDK now. Kept as no-op for safety."""
+    logger.debug("R2 upload moved to frontend SDK — skipping [%s]", r2_key)
 
 
 def _resolve_class(filename: str) -> str:
@@ -184,8 +139,38 @@ def _resolve_class(filename: str) -> str:
     return filename.split("_")[0]
 
 
-def prepare_yolo_data(filter_classes=None):
-    """Prepare YOLO dataset from training_data/ directory.
+def _collect_zip_images(dataset_id: str) -> list[tuple[Path, str]]:
+    """Collect (image_path, class_name) from a ZIP dataset folder.
+
+    ZIP datasets are stored at storage/training_data/{dataset_id}/{class}/
+    where every first-level sub-folder is a class label.
+    Returns [] if the dataset does not exist or is empty.
+    """
+    root = Path("storage") / "training_data" / dataset_id
+    if not root.is_dir():
+        logger.error("ZIP dataset not found: %s", root)
+        return []
+
+    result = []
+    for class_dir in sorted(root.iterdir()):
+        if not class_dir.is_dir():
+            continue
+        class_name = class_dir.name
+        imgs = sorted(
+            p for p in class_dir.glob("*")
+            if p.is_file() and p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+        )
+        for img in imgs:
+            result.append((img, class_name))
+    return result
+
+
+def prepare_yolo_data(filter_classes=None, dataset_id=None):
+    """Prepare YOLO dataset for training.
+
+    If dataset_id is provided, reads a ZIP-uploaded dataset from
+    storage/training_data/{dataset_id}/{class}/ where each sub-folder is a
+    class label. Otherwise falls back to the legacy flat training_data/ dir.
     If filter_classes is provided, only include images from those classes.
     """
     base_path = Path("dataset")
@@ -196,44 +181,62 @@ def prepare_yolo_data(filter_classes=None):
         (p / "images").mkdir(parents=True, exist_ok=True)
         (p / "labels").mkdir(parents=True, exist_ok=True)
 
-    source_dir = Path("training_data")
-    images = []
-    for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']:
-        images.extend(list(source_dir.glob(ext)))
+    items: list[tuple[Path, str]] = []
+
+    if dataset_id:
+        items = _collect_zip_images(dataset_id)
+        if not items:
+            logger.error("No images found in ZIP dataset: %s", dataset_id)
+            return None
+        logger.info("Using ZIP dataset '%s' — %d images", dataset_id, len(items))
+    else:
+        source_dir = Path("training_data")
+        images = []
+        for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']:
+            images.extend(list(source_dir.glob(ext)))
+        items = [(img, _resolve_class(img.name)) for img in images]
 
     if filter_classes:
         filter_set = set(c.strip().lower() for c in filter_classes if c.strip())
         if filter_set:
-            images = [img for img in images if _resolve_class(img.name).lower() in filter_set]
-            logger.info("Filtered to classes: %s — %d images", filter_classes, len(images))
+            items = [(img, cls) for img, cls in items if cls.lower() in filter_set]
+            logger.info("Filtered to classes: %s — %d images", filter_classes, len(items))
 
-    if not images:
+    if not items:
         logger.error("No images found in training_data/")
         return None
 
-    classes = sorted(list(set([_resolve_class(img.name) for img in images])))
+    classes = sorted(list(set(cls for _, cls in items)))
     class_to_id = {cls: i for i, cls in enumerate(classes)}
     logger.info("Found classes: %s", classes)
 
-    random.shuffle(images)
-    split_idx = int(len(images) * 0.8)
-    train_images = images[:split_idx]
-    val_images = images[split_idx:]
+    random.shuffle(items)
+    split_idx = int(len(items) * 0.8)
+    train_items = items[:split_idx]
+    val_items = items[split_idx:]
 
-    if len(val_images) == 0 and len(train_images) > 0:
-        val_images = train_images
+    if len(val_items) == 0 and len(train_items) > 0:
+        val_items = train_items
 
-    def process_set(img_list, target_path):
-        for img_path in img_list:
-            cls_name = _resolve_class(img_path.name)
+    def process_set(set_items, target_path):
+        used: dict[str, int] = {}
+        for img_path, cls_name in set_items:
             cls_id = class_to_id[cls_name]
-            shutil.copy(img_path, target_path / "images" / img_path.name)
-            label_file = target_path / "labels" / f"{img_path.stem}.txt"
+            out_name = img_path.name
+            # Uniquify output name to avoid collisions across classes/folders
+            if out_name in used:
+                used[out_name] += 1
+                stem, ext = os.path.splitext(out_name)
+                out_name = f"{stem}__{used[out_name]}{ext}"
+            else:
+                used[out_name] = 0
+            shutil.copy(img_path, target_path / "images" / out_name)
+            label_file = target_path / "labels" / f"{Path(out_name).stem}.txt"
             with open(label_file, "w") as f:
                 f.write(f"{cls_id} 0.5 0.5 0.8 0.8\n")
 
-    process_set(train_images, train_path)
-    process_set(val_images, val_path)
+    process_set(train_items, train_path)
+    process_set(val_items, val_path)
 
     data_yaml = {
         'train': str(train_path.absolute() / "images"),
@@ -246,7 +249,7 @@ def prepare_yolo_data(filter_classes=None):
     with open(yaml_path, "w") as f:
         yaml.dump(data_yaml, f)
 
-    logger.info("Dataset prepared: %d train, %d val", len(train_images), len(val_images))
+    logger.info("Dataset prepared: %d train, %d val", len(train_items), len(val_items))
     return yaml_path
 
 
@@ -329,6 +332,7 @@ def train():
     workers = int(os.environ.get("TRAIN_WORKERS", "8"))
     device = os.environ.get("TRAINING_DEVICE", "auto")
     session_id = os.environ.get("TRAIN_SESSION_ID", "")
+    dataset_id = os.environ.get("TRAIN_DATASET_ID", "") or None
     selected_classes_raw = os.environ.get("TRAIN_SELECTED_CLASSES", "")
     selected_classes = [c.strip() for c in selected_classes_raw.split(",") if c.strip()] if selected_classes_raw else None
 
@@ -341,7 +345,7 @@ def train():
     logger.info("Using device: %s", device)
     db_session.log("Using device: %s", device)
 
-    data_yaml = prepare_yolo_data(selected_classes)
+    data_yaml = prepare_yolo_data(selected_classes, dataset_id)
 
     if data_yaml is None:
         logger.error("Training aborted: No data available.")
@@ -408,6 +412,8 @@ def train():
             amp=True,
             workers=workers,
             cache=os.environ.get("TRAIN_CACHE", "ram"),
+            patience=int(os.environ.get("TRAIN_PATIENCE", "20")),
+            cos_lr=True,
             project="runs/detect",
             name=output_name,
             exist_ok=True,

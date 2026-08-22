@@ -19,17 +19,19 @@ export async function uploadTrainingBatch(
   return res.data;
 }
 
-export async function getTrainingClasses(): Promise<TrainingClassesResponse> {
+export async function getTrainingClasses(datasetId = ''): Promise<TrainingClassesResponse> {
   const res = await client.get<TrainingClassesResponse>('/training-data/classes', {
+    params: { ...(datasetId ? { dataset_id: datasetId } : {}) },
     timeout: 5000,
   });
   return res.data;
 }
 
-export async function getTrainingImages(className = '', page = 1, limit = 60): Promise<TrainingImagesResponse> {
+export async function getTrainingImages(className = '', page = 1, limit = 60, datasetId = ''): Promise<TrainingImagesResponse> {
   const res = await client.get<TrainingImagesResponse>('/training-data/images', {
     params: {
       ...(className ? { class_name: className } : {}),
+      ...(datasetId ? { dataset_id: datasetId } : {}),
       page,
       limit,
     },

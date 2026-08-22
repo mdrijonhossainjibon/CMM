@@ -1,0 +1,9 @@
+{
+  "classes": [
+    "dcfg",
+    "dr",
+    "fgy"
+  ],
+  "num_classes": 3,
+  "image_size": 224
+}

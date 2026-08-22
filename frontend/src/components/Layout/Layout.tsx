@@ -7,8 +7,9 @@ import { Outlet, useLocation } from 'react-router-dom';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/detection': 'Captcha Detection',
+  '/scene-training': 'Scene Training',
   '/training': 'Model Training',
-  '/data-upload': 'Data Upload',
+  '/dataset-upload': 'Dataset Upload',
   '/models': 'Model Management',
   '/analytics': 'Analytics',
   '/datasets': 'Datasets',

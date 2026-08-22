@@ -61,7 +61,7 @@ export function useWebSocket(path: string | null) {
         ws.onclose = () => {
           if (!mountedRef.current) return;
           setIsConnected(false);
-          wsRef.current = null;
+          if (wsRef.current === ws) wsRef.current = null;
 
           if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
             const delay = Math.min(
@@ -88,6 +88,7 @@ export function useWebSocket(path: string | null) {
       }
     };
 
+    setMessages([]);
     doConnect();
 
     return () => {

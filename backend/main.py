@@ -9,7 +9,7 @@ from backend.core.config import settings
 from backend.core.security import get_password_hash
 from backend.db.connection import connect_db, close_db
 from backend.services.user_service import UserService
-from backend.routers import auth, detection, training, models, datasets, logs, exports, websocket, admin, r2, analytics
+from backend.routers import auth, detection, training, models, datasets, logs, exports, websocket, admin, analytics, vision
 from backend.routers import settings as settings_router
 from backend.routers import migrate
 
@@ -61,10 +61,10 @@ app.include_router(logs.router)
 app.include_router(exports.router)
 app.include_router(websocket.router)
 app.include_router(admin.router)
-app.include_router(r2.router)
 app.include_router(analytics.router)
 app.include_router(settings_router.router)
 app.include_router(migrate.router)
+app.include_router(vision.router)
 
 
 @app.exception_handler(404)

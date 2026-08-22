@@ -61,6 +61,8 @@ export interface TrainingStatusResponse {
   gpu_mem_used?: number;
   gpu_mem_total?: number;
   gpu_temperature?: number;
+  started_at?: number;
+  elapsed_seconds?: number;
 }
 
 export interface ModelInfo {
@@ -187,7 +189,8 @@ export type IconName =
   | 'refresh' | 'download' | 'trash' | 'search'
   | 'plus' | 'x' | 'check' | 'alertTriangle'
   | 'wifi' | 'wifiOff' | 'power' | 'info'
-  | 'dataset' | 'success' | 'storage';
+  | 'dataset' | 'success' | 'storage'
+  | 'lock' | 'eye' | 'eyeOff';
 
 export interface TrainingType {
   name: string;
@@ -207,6 +210,7 @@ export interface TrainingConfig {
   workers: number;
   optimize?: boolean;
   selected_classes?: string[];
+  dataset_id?: string;
 }
 
 export interface TrainingMetricsResponse {
@@ -241,4 +245,54 @@ export interface DashboardStats {
   activeTrainings: number;
   successRate: number;
   storageUsage: string;
+}
+
+// ---------------------------------------------------------------------------
+// ZIP Dataset Upload
+// ---------------------------------------------------------------------------
+
+export interface ZipDatasetClass {
+  name: string;
+  images: number;
+}
+
+export interface ZipDatasetMetadata {
+  datasetId: string;
+  totalClasses: number;
+  totalImages: number;
+  className?: string;
+  classes: ZipDatasetClass[];
+  backup: string;
+  status: string;
+  created_at?: string;
+}
+
+export interface ZipDatasetResponse {
+  success: boolean;
+  dataset: ZipDatasetMetadata;
+}
+
+export interface ZipDatasetListResponse {
+  success: boolean;
+  datasets: ZipDatasetSummary[];
+}
+
+export interface ZipDatasetSummary {
+  datasetId: string;
+  totalClasses: number;
+  totalImages: number;
+  className?: string;
+  backup: string;
+  status: string;
+  created_at?: string;
+}
+
+export interface ZipTrainingRecord {
+  image: string;
+  label: string;
+}
+
+export interface ZipTrainingRecordsResponse {
+  success: boolean;
+  records: ZipTrainingRecord[];
 }

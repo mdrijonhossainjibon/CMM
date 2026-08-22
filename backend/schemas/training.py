@@ -17,6 +17,7 @@ class TrainingRequest(BaseModel):
     workers: int = 8
     optimize: bool = True
     selected_classes: Optional[List[str]] = None
+    dataset_id: Optional[str] = None
 
 
 class TrainingStatusResponse(BaseModel):

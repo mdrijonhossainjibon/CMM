@@ -5,9 +5,10 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Icon } from '../components/common/Icons';
 import { startTraining, getTrainingStatus, getTrainingTypes, getHardwareInfo } from '../services/trainingService';
 import { getTrainingClasses } from '../services/trainingDataService';
+import { listZipDatasets } from '../services/datasetService';
 import { pullTrainingDataFromR2, getR2Status } from '../services/r2Service';
 import { useWebSocket } from '../hooks';
-import type { TrainingStatusResponse, TrainingType, TrainingClass } from '../types';
+import type { TrainingStatusResponse, TrainingType, TrainingClass, ZipDatasetSummary } from '../types';
 import toast from 'react-hot-toast';
 
 const DEFAULT_CONFIG = {
@@ -18,6 +19,7 @@ const DEFAULT_CONFIG = {
   workers: 8,
   optimize: true,
   selected_classes: [] as string[],
+  dataset_id: '' as string,
 };
 
 export default function Training() {
@@ -31,6 +33,7 @@ export default function Training() {
   const [hardware, setHardware] = useState<{ device_type: string; gpu_name?: string; gpu_vram_mb?: number } | null>(null);
   const [trainingClasses, setTrainingClasses] = useState<TrainingClass[]>([]);
   const [totalTrainImages, setTotalTrainImages] = useState(0);
+  const [zipDatasets, setZipDatasets] = useState<ZipDatasetSummary[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [r2Configured, setR2Configured] = useState(false);
 
@@ -52,16 +55,24 @@ export default function Training() {
     const batch = config.batch_size;
     const img = config.image_size;
 
-    // Per-image-per-epoch seconds (batch 16, img 640 base)
-    const baseSec = isGpu ? 0.13 : 1.2;
-    // Batch scaling: boro batch = fast
-    const batchFactor = Math.pow(16 / batch, 0.5);
+    // Per-image-per-epoch seconds (batch 16, img 640 base) — realistic YOLOv8n speeds
+    const baseSec = isGpu ? 0.02 : 0.5;
+    // Batch scaling: GPU te boro batch onek fast, CPU te alo beshi (CPU bound)
+    const batchFactor = Math.pow(16 / batch, isGpu ? 0.5 : 0.15);
     // Image size scaling: choto img = fast
     const imgFactor = Math.pow(img / 640, 2);
 
     const perImageSec = baseSec * batchFactor * imgFactor;
     const totalSeconds = usedImages * epochs * perImageSec;
-    const totalMinutes = totalSeconds / 60;
+
+    // Live ETA: training chalu thakle actual measured speed theke
+    let liveEtaSeconds: number | null = null;
+    if (status?.running && status.progress > 0 && (status.elapsed_seconds ?? 0) > 5) {
+      const secPerPercent = (status.elapsed_seconds as number) / status.progress;
+      liveEtaSeconds = secPerPercent * Math.max(100 - status.progress, 0);
+    }
+
+    const totalMinutes = (liveEtaSeconds ?? totalSeconds) / 60;
 
     // VRAM estimate (GB)
     const vramGb = (batch * (img ** 2)) / (1024 * 1024 * 4000) + 0.8;
@@ -84,13 +95,14 @@ export default function Training() {
       batch,
       img,
       totalMinutes,
-      totalSeconds,
+      totalSeconds: liveEtaSeconds ?? totalSeconds,
+      isLive: liveEtaSeconds !== null,
       fmt: fmtTime(totalMinutes),
       vramGb,
       quality,
       gpuName: hardware?.gpu_name || 'GPU',
     };
-  }, [config, hardware, trainingClasses, totalTrainImages]);
+  }, [config, hardware, trainingClasses, totalTrainImages, status]);
 
 
   const fetchStatus = useCallback(async () => {
@@ -108,13 +120,30 @@ export default function Training() {
     }
   }, [pollInterval]);
 
-  const fetchClasses = useCallback(async () => {
+  const fetchClasses = useCallback(async (dataSetId: string) => {
     try {
-      const res = await getTrainingClasses();
+      const res = await getTrainingClasses(dataSetId);
       setTrainingClasses(res.classes);
       setTotalTrainImages(res.total_images);
     } catch { /* ignore */ }
   }, []);
+
+  const fetchZipDatasets = useCallback(async () => {
+    try {
+      const res = await listZipDatasets();
+      setZipDatasets(res.datasets);
+      return res.datasets;
+    } catch {
+      setZipDatasets([]);
+      return [];
+    }
+  }, []);
+
+  const handleSelectDataset = async (datasetId: string) => {
+    setConfig((c) => ({ ...c, dataset_id: datasetId, selected_classes: [] }));
+    setTrainingClasses([]);
+    await fetchClasses(datasetId);
+  };
 
   const handleSyncFromR2 = async () => {
     setSyncing(true);
@@ -122,7 +151,7 @@ export default function Training() {
       const res = await pullTrainingDataFromR2();
       if (res.success) {
         toast.success(`Downloaded ${res.downloaded ?? 0} image(s) from R2 backup!`);
-        fetchClasses();
+        fetchClasses(config.dataset_id);
       } else {
         toast.error(res.message || 'No data found in R2 backup');
       }
@@ -151,11 +180,21 @@ export default function Training() {
         if (res.hardware) setHardware(res.hardware);
       })
       .catch(() => {});
-    fetchClasses();
+    // Load ZIP datasets on mount; auto-select the first valid one so training
+    // data shows immediately instead of the empty state.
+    fetchZipDatasets().then((datasets) => {
+      const valid = datasets.find((d) => d.status === 'valid') || datasets[0];
+      if (valid) {
+        setConfig((c) => ({ ...c, dataset_id: valid.datasetId }));
+        fetchClasses(valid.datasetId);
+      } else {
+        fetchClasses('');
+      }
+    }).catch(() => fetchClasses(''));
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [fetchStatus, fetchClasses, pollInterval]);
+  }, [fetchStatus, fetchClasses, fetchZipDatasets, pollInterval]);
 
   useEffect(() => {
     if (status?.running && !pollInterval) {
@@ -214,11 +253,63 @@ export default function Training() {
             </button>
           )}
         </h2>
+
+        {/* Dataset selector */}
+        <div className="mb-4">
+          <label className="block text-[10px] uppercase tracking-wider text-dark-text/50 mb-1.5">
+            Training Dataset
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+              <button
+                onClick={() => handleSelectDataset('')}
+                disabled={isRunning}
+                className={`text-[11px] sm:text-xs px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                  config.dataset_id === ''
+                    ? 'bg-primary/10 border-primary text-primary'
+                    : 'bg-dark-surface border-dark-border text-dark-text hover:text-dark-heading hover:border-dark-text/30'
+                }`}
+                title="Legacy flat training_data directory"
+              >
+                Root Data
+              </button>
+              {zipDatasets.map((d) => (
+                <button
+                  key={d.datasetId}
+                  onClick={() => handleSelectDataset(d.datasetId)}
+                  disabled={isRunning}
+                  className={`text-[11px] sm:text-xs px-3 py-1.5 rounded-lg border font-mono transition-colors disabled:opacity-50 flex items-center gap-1.5 ${
+                    config.dataset_id === d.datasetId
+                      ? 'bg-primary/10 border-primary text-primary'
+                      : 'bg-dark-surface border-dark-border text-dark-text hover:text-dark-heading hover:border-dark-text/30'
+                  }`}
+                  title={`${d.totalImages} images, ${d.totalClasses} classes · ${d.status}`}
+                >
+                  <span>{d.status === 'valid' ? '✓' : '○'}</span>
+                  {d.datasetId.slice(0, 10)}
+                  <span className="opacity-60">({d.totalImages})</span>
+                </button>
+              ))}
+            </div>
+            {zipDatasets.length === 0 && (
+              <span className="text-[11px] text-dark-text/40 shrink-0">
+                No ZIP datasets — upload from Dataset Upload page
+              </span>
+            )}
+          </div>
+        </div>
+
         {trainingClasses.length === 0 ? (
           <div className="text-center py-4">
             <Icon name="empty" className="w-6 h-6 text-dark-text/20 mx-auto mb-2" />
-            <p className="text-xs text-dark-text/60">No training data yet. Upload images from Data Upload page.</p>
-            {r2Configured && (
+            <p className="text-xs text-dark-text/60">
+              {config.dataset_id
+                ? 'This dataset has no images in its class folders.'
+                : zipDatasets.length > 0
+                  ? 'Select a dataset above to see its training data.'
+                  : 'No training data yet. Upload a ZIP dataset from the Dataset Upload page.'}
+            </p>
+            {r2Configured && config.dataset_id === '' && (
               <button
                 onClick={handleSyncFromR2}
                 disabled={syncing}
@@ -308,6 +399,32 @@ export default function Training() {
           </span>
           Configure Parameters
         </h2>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-[10px] uppercase tracking-wide text-dark-text/50">Preset:</span>
+          {[
+            { label: '⚡ Turbo (5-10 min)', cfg: { epochs: 20, batch_size: 32, image_size: 512 } },
+            { label: 'Balanced', cfg: { epochs: 50, batch_size: 32, image_size: 640 } },
+            { label: 'Standard', cfg: { epochs: 100, batch_size: 16, image_size: 640 } },
+            { label: 'High Quality', cfg: { epochs: 150, batch_size: 16, image_size: 640 } },
+          ].map((p) => {
+            const active = config.epochs === p.cfg.epochs && config.batch_size === p.cfg.batch_size && config.image_size === p.cfg.image_size;
+            return (
+              <button
+                key={p.label}
+                type="button"
+                disabled={isRunning}
+                onClick={() => setConfig((c) => ({ ...c, ...p.cfg, batch_size: hardware?.device_type === 'gpu' ? p.cfg.batch_size : Math.min(p.cfg.batch_size, 16) }))}
+                className={`px-3 py-1.5 rounded-full text-xs border transition-colors disabled:opacity-50 ${
+                  active
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-dark-surface text-dark-text border-dark-border hover:border-primary/50'
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
         <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <div>
             <label className="block text-xs text-dark-text mb-1">Epochs</label>
@@ -466,9 +583,11 @@ export default function Training() {
             </p>
           </div>
           <div className="p-3 rounded-lg bg-dark-surface border border-dark-border">
-            <p className="text-[10px] text-dark-text/60 mb-1">Est. Time</p>
+            <p className="text-[10px] text-dark-text/60 mb-1">{estimate.isLive ? 'Live Remaining' : 'Est. Time'}</p>
             <p className="text-lg font-semibold text-primary">{estimate.fmt}</p>
-            <p className="text-[10px] text-dark-text/40 mt-0.5">~{Math.max(Math.round(estimate.totalSeconds), 1).toLocaleString()} sec</p>
+            <p className="text-[10px] text-dark-text/40 mt-0.5">
+              {estimate.isLive ? `measured · ${status?.progress ?? 0}% done` : `~${Math.max(Math.round(estimate.totalSeconds), 1).toLocaleString()} sec`}
+            </p>
           </div>
           <div className="p-3 rounded-lg bg-dark-surface border border-dark-border">
             <p className="text-[10px] text-dark-text/60 mb-1">Est. VRAM</p>

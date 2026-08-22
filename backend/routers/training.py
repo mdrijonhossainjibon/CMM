@@ -2,7 +2,6 @@ import os
 import time
 import hashlib
 import base64
-import asyncio
 import logging
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 
@@ -27,17 +26,6 @@ def _is_image_file(filename: str) -> bool:
     return os.path.splitext(filename)[1].lower() in _IMAGE_EXTS
 
 
-async def _auto_sync_training_data():
-    """Background task: push training_data/ to R2 as backup. Never blocks uploads.
-    One-way upload — R2 te uploaded data kokhono delete hoy na (true backup)."""
-    try:
-        from backend.services.r2_service import r2_service
-        if not await r2_service._is_configured():
-            return
-        result = await r2_service.upload_directory(settings.TRAINING_DATA_DIR, "training-data")
-        logger.info("R2 backup sync training-data: %s", result)
-    except Exception as e:
-        logger.warning("R2 backup sync failed: %s", e)
 from backend.utils.validators import validate_image_file, validate_file_size
 
 router = APIRouter(prefix="/api", tags=["Training"])
@@ -62,7 +50,6 @@ async def save_training_data(
         with open(filepath, "wb") as f:
             f.write(content)
         add_entries(settings.TRAINING_DATA_DIR, {filename: label.strip().lower()})
-        asyncio.create_task(_auto_sync_training_data())
         return {"success": True, "saved_as": filename}
     except HTTPException:
         raise
@@ -105,9 +92,6 @@ async def upload_training_data_batch(
     if entries:
         add_entries(settings.TRAINING_DATA_DIR, entries)
 
-    if saved:
-        asyncio.create_task(_auto_sync_training_data())
-
     return {
         "success": len(errors) == 0,
         "saved_count": len(saved),
@@ -118,7 +102,25 @@ async def upload_training_data_batch(
 
 
 @router.get("/training-data/classes")
-async def list_training_classes():
+async def list_training_classes(dataset_id: str = ""):
+    # ZIP dataset mode: each first-level folder = class
+    if dataset_id:
+        root = os.path.join(settings.ZIP_TRAINING_DATA_DIR, dataset_id)
+        if not os.path.isdir(root):
+            return {"classes": [], "total_images": 0}
+        classes = {}
+        for entry in sorted(os.scandir(root), key=lambda e: e.name.lower()):
+            if not entry.is_dir():
+                continue
+            count = sum(
+                1 for f in os.scandir(entry.path)
+                if f.is_file() and _is_image_file(f.name)
+            )
+            if count > 0:
+                classes[entry.name] = count
+        result = [{"name": k, "count": v} for k, v in sorted(classes.items())]
+        return {"classes": result, "total_images": sum(c["count"] for c in result)}
+
     data_dir = settings.TRAINING_DATA_DIR
     if not os.path.exists(data_dir):
         return {"classes": [], "total_images": 0}
@@ -138,28 +140,43 @@ async def list_training_classes():
 
 
 @router.get("/training-data/images")
-async def list_training_images(request: Request, class_name: str = "", page: int = 1, limit: int = 60):
-    data_dir = settings.TRAINING_DATA_DIR
-    if not os.path.exists(data_dir):
-        return {"images": [], "total": 0, "page": 1, "limit": limit, "has_more": False}
-
+async def list_training_images(request: Request, class_name: str = "", page: int = 1, limit: int = 60, dataset_id: str = ""):
     page = max(page, 1)
     limit = min(max(limit, 1), 300)
 
     all_images = []
-    for f in sorted(os.listdir(data_dir)):
-        full = os.path.join(data_dir, f)
-        if not os.path.isfile(full) or not _is_image_file(f):
-            continue
-        cls = get_class(f, data_dir, f.split("_")[0])
-        if class_name and cls != class_name.lower():
-            continue
-        all_images.append({
-            "filename": f,
-            "class": cls,
-            # Relative URL — frontend configured base theke resolve korbe
-            "url": f"api/datasets/train?file={f}",
-        })
+
+    if dataset_id:
+        root = os.path.join(settings.ZIP_TRAINING_DATA_DIR, dataset_id)
+        if os.path.isdir(root):
+            for cls_dir in sorted(os.scandir(root), key=lambda e: e.name.lower()):
+                if not cls_dir.is_dir():
+                    continue
+                if class_name and cls_dir.name.lower() != class_name.lower():
+                    continue
+                for f in sorted(os.scandir(cls_dir.path), key=lambda e: e.name.lower()):
+                    if not f.is_file() or not _is_image_file(f.name):
+                        continue
+                    all_images.append({
+                        "filename": f.name,
+                        "class": cls_dir.name,
+                        "url": f"api/datasets/zip/{dataset_id}/image?file={f.name}&class_name={cls_dir.name}",
+                    })
+    else:
+        data_dir = settings.TRAINING_DATA_DIR
+        if os.path.exists(data_dir):
+            for f in sorted(os.listdir(data_dir)):
+                full = os.path.join(data_dir, f)
+                if not os.path.isfile(full) or not _is_image_file(f):
+                    continue
+                cls = get_class(f, data_dir, f.split("_")[0])
+                if class_name and cls != class_name.lower():
+                    continue
+                all_images.append({
+                    "filename": f,
+                    "class": cls,
+                    "url": f"api/datasets/train?file={f}",
+                })
 
     total = len(all_images)
     start = (page - 1) * limit
@@ -170,26 +187,6 @@ async def list_training_images(request: Request, class_name: str = "", page: int
     return {"images": images, "total": total, "page": page, "limit": limit, "has_more": has_more}
 
 
-async def _r2_delete_object(r2_key: str):
-    """Delete single object from R2 backup (manual delete/rename er jonno)."""
-    try:
-        from backend.services.r2_service import r2_service
-        if await r2_service._is_configured():
-            await r2_service.delete_object(r2_key)
-    except Exception as e:
-        logger.warning("R2 delete failed [%s]: %s", r2_key, e)
-
-
-async def _r2_upload_file(local_path: str, r2_key: str):
-    """Upload single file to R2 backup (rename er pore)."""
-    try:
-        from backend.services.r2_service import r2_service
-        if await r2_service._is_configured():
-            await r2_service.upload_file(local_path, r2_key)
-    except Exception as e:
-        logger.warning("R2 upload failed [%s]: %s", r2_key, e)
-
-
 @router.delete("/training-data/delete")
 async def delete_training_image(filename: str):
     filepath = os.path.join(settings.TRAINING_DATA_DIR, filename)
@@ -197,7 +194,6 @@ async def delete_training_image(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
     os.remove(filepath)
     remove_entries(settings.TRAINING_DATA_DIR, [filename])
-    await _r2_delete_object(f"training-data/{filename}")
     return {"success": True, "deleted": filename}
 
 
@@ -222,13 +218,6 @@ async def delete_training_class(class_name: str):
 
     if removed:
         remove_by_class(data_dir, target)
-        try:
-            from backend.services.r2_service import r2_service
-            if await r2_service._is_configured():
-                for f in removed:
-                    await r2_service.delete_object(f"training-data/{f}")
-        except Exception as e:
-            logger.warning("R2 class delete sync failed: %s", e)
     return {"success": True, "deleted_count": deleted, "class": class_name}
 
 
@@ -259,9 +248,6 @@ async def rename_training_image(filename: str, new_class: str):
 
     os.rename(old_path, new_path)
     rename_entry(data_dir, filename, new_filename, safe_new)
-    # R2 backup update: old delete + new upload (ekbar kore)
-    await _r2_delete_object(f"training-data/{filename}")
-    await _r2_upload_file(new_path, f"training-data/{new_filename}")
     return {"success": True, "old_name": filename, "new_name": new_filename, "class": safe_new}
 
 
@@ -346,8 +332,8 @@ async def start_training(request: TrainingRequest):
             optimize=request.optimize,
             selected_classes=request.selected_classes,
             session_id=session_id,
+            dataset_id=request.dataset_id,
         )
-        asyncio.create_task(_auto_sync_training_data())
         return TrainingStartResponse(
             success=True, message=f"Training started for {request.training_type}", session_id=session_id
         )

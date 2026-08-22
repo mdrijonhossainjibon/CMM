@@ -43,6 +43,14 @@ export default function Datasets() {
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
+  const handlePage = (dir: 1 | -1) => {
+    const next = page + dir;
+    if (next < 1) return;
+    if (dir > 0 && !hasMore) return;
+    setPage(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -58,14 +66,6 @@ export default function Datasets() {
       setLoading(false);
     }
   }, [page]);
-
-  const handlePage = (dir: 1 | -1) => {
-    const next = page + dir;
-    if (next < 1) return;
-    if (dir > 0 && !hasMore) return;
-    setPage(next);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -86,8 +86,7 @@ export default function Datasets() {
       }
       toast.success(`Deleted ${filename}`);
       setConfirmTarget(null);
-      setPage(1);
-      fetchData();
+      await fetchData();
     } catch {
       toast.error('Failed to delete image');
     } finally {
@@ -106,8 +105,7 @@ export default function Datasets() {
       const res = await deleteDataset(imageDir);
       toast.success(`Deleted ${res.deleted_count} image(s)`);
       setConfirmDeleteAll(false);
-      setPage(1);
-      fetchData();
+      await fetchData();
     } catch {
       toast.error('Failed to delete dataset');
     } finally {
@@ -125,8 +123,7 @@ export default function Datasets() {
         toast.success(`Deleted class "${selectedClass}"`);
         setConfirmDeleteClass(false);
         setSelectedClass('');
-        setPage(1);
-        fetchData();
+        await fetchData();
       } catch {
         toast.error('Failed to delete class');
       } finally {
@@ -140,8 +137,7 @@ export default function Datasets() {
       toast.success(`Deleted ${res.deleted_count} image(s) of class "${selectedClass}"`);
       setConfirmDeleteClass(false);
       setSelectedClass('');
-      setPage(1);
-      fetchData();
+      await fetchData();
     } catch {
       toast.error('Failed to delete class');
     } finally {
@@ -202,9 +198,13 @@ export default function Datasets() {
                 allowClear
                 showSearch
                 optionFilterProp="label"
+                filterOption={(input, option) =>
+                  String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())
+                }
                 style={{ width: '100%' }}
                 status={selectedClass ? 'error' : undefined}
-                dropdownStyle={{ maxHeight: 220 }}
+                popupMatchSelectWidth={false}
+                listHeight={220}
               />
             </div>
             <button

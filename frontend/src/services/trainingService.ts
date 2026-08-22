@@ -49,3 +49,8 @@ export async function getTrainingClasses() {
   });
   return res.data;
 }
+
+export async function getTrainStatusRaw() {
+  const res = await client.get('/train/status', { timeout: 5000 });
+  return res.data;
+}

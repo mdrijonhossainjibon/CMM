@@ -7,6 +7,7 @@ from backend.schemas.auth import (
     AdminCreateUserRequest,
     AdminUserListItem,
     AdminDeleteUserRequest,
+    AdminChangePasswordRequest,
 )
 from backend.core.security import (
     verify_password,
@@ -136,14 +137,19 @@ async def admin_delete_user(
 
 @router.post("/admin/change-password")
 async def admin_change_password(
-    username: str,
-    new_password: str,
+    body: AdminChangePasswordRequest,
     user_service: UserService = Depends(get_user_service),
-    _current_user: dict = Depends(require_super_admin),
+    current_user: dict = Depends(require_super_admin),
 ):
-    user = await user_service.find_by_username(username)
+    user = await user_service.find_by_username(body.username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    hashed = get_password_hash(new_password)
-    await user_service.change_password(username, hashed)
-    return {"success": True, "message": f"Password changed for {username}"}
+
+    # Super admin nijer password ba onno super_admin er password change korte pare.
+    # (Ekmatro super_admin ei endpoint e access kore, tai nicher guard safety net hisebe.)
+    if current_user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admin can change passwords")
+
+    hashed = get_password_hash(body.new_password)
+    await user_service.change_password(body.username, hashed)
+    return {"success": True, "message": f"Password changed for {body.username}"}

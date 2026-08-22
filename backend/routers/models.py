@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from backend.core.config import settings
-from backend.core.dependencies import reload_detector_instance, set_active_model
+from backend.core.dependencies import reload_detector_instance, set_active_model, get_model_path_for_type, reload_all_models
 from backend.services.detection_service import DetectionService
 
 router = APIRouter(prefix="/api", tags=["Models"])
@@ -123,8 +123,18 @@ async def download_model(
 @router.post("/reload")
 async def reload_model():
     try:
-        detector = reload_detector_instance()
+        reload_detector_instance()
         return {"success": True, "message": "Model reloaded successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/models/reload-all")
+async def reload_all():
+    """Warm-load all available models after training finishes."""
+    try:
+        report = reload_all_models()
+        return {"success": True, "models": report}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -138,3 +148,33 @@ async def get_info():
         return {"model_name": detector.model_name, "device": detector.device}
     except Exception:
         return {"model_name": "Not Initialized", "device": "N/A"}
+
+
+@router.get("/models/status")
+async def get_model_status():
+    """Report whether each model type's file exists and is loaded."""
+    from backend.core.dependencies import _detectors
+
+    statuses = {}
+    for model_type, path in {
+        "auto": _get_model_path_for_type("auto"),
+        "aws": _get_model_path_for_type("aws"),
+        "kbs": _get_model_path_for_type("kbs"),
+        "kb-l": _get_model_path_for_type("kb-l"),
+        "custom": _get_model_path_for_type("custom"),
+    }.items():
+        exists = os.path.exists(path) and path.endswith(".pt")
+        key = f"{model_type}:{path}"
+        statuses[model_type] = {
+            "path": path,
+            "available": exists,
+            "loaded": key in _detectors,
+        }
+    return {"success": True, "models": statuses}
+
+
+def _get_model_path_for_type(model_type: str) -> str:
+    if model_type == "auto":
+        from backend.core.dependencies import _active_model_path
+        return _active_model_path
+    return get_model_path_for_type(model_type)

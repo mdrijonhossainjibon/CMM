@@ -72,6 +72,7 @@ class TrainingService:
         optimize: bool = True,
         selected_classes: list[str] | None = None,
         session_id: str | None = None,
+        dataset_id: str | None = None,
     ) -> None:
         self._hardware = detect_hardware()
 
@@ -96,6 +97,8 @@ class TrainingService:
             env["TRAIN_SELECTED_CLASSES"] = ",".join(selected_classes)
         if session_id:
             env["TRAIN_SESSION_ID"] = session_id
+        if dataset_id:
+            env["TRAIN_DATASET_ID"] = dataset_id
 
         if self._hardware["device_type"] == "gpu":
             env["TRAINING_DEVICE"] = "0"
@@ -162,7 +165,8 @@ class TrainingService:
         result.update(gpu_status)
 
         if poll is None:
-            result.update({"running": True, "status": "training"})
+            elapsed = time_module.time() - self._started_at if self._started_at else 0.0
+            result.update({"running": True, "status": "training", "started_at": self._started_at, "elapsed_seconds": round(elapsed, 1)})
         elif poll == 0:
             result.update({"running": False, "status": "completed", "progress": 100})
         else:

@@ -5,6 +5,31 @@ import type {
   BatchDetectResponse,
 } from '../types';
 
+export interface ModelTypeStatus {
+  path: string;
+  available: boolean;
+  loaded: boolean;
+}
+
+export interface ModelStatusResponse {
+  success: boolean;
+  models: Record<string, ModelTypeStatus>;
+}
+
+export async function getModelStatus(): Promise<ModelStatusResponse> {
+  const res = await client.get<ModelStatusResponse>('/models/status', {
+    timeout: 5000,
+  });
+  return res.data;
+}
+
+export async function reloadAllModels(): Promise<ModelStatusResponse> {
+  const res = await client.post<ModelStatusResponse>('/models/reload-all', undefined, {
+    timeout: 120000,
+  });
+  return res.data;
+}
+
 export async function detectSingle(
   file: File,
   confThreshold = 0.5,

@@ -25,42 +25,41 @@ class SettingsService:
         if not doc:
             return {
                 "r2_enabled": False,
-                "r2_endpoint_url": "",
-                "r2_access_key_id": "",
+                "r2_api_key": "",
+                "r2_base_url": "",
                 "r2_bucket_name": "captchamaster",
-                "r2_region": "auto",
             }
         return {
             "r2_enabled": doc.get("r2_enabled", False),
-            "r2_endpoint_url": doc.get("r2_endpoint_url", ""),
-            "r2_access_key_id": doc.get("r2_access_key_id", ""),
+            "r2_api_key": doc.get("r2_api_key", ""),
+            "r2_base_url": doc.get("r2_base_url", ""),
             "r2_bucket_name": doc.get("r2_bucket_name", "captchamaster"),
-            "r2_region": doc.get("r2_region", "auto"),
         }
 
     async def get_r2_config(self) -> dict:
         return await self.get_all()
 
+    async def get_r2_credentials(self) -> dict:
+        """Frontend SDK sync er jonno sompurno R2 config (api key sahit)."""
+        cfg = await self.get_all()
+        cfg["r2_api_key"] = await self.get_r2_secret_key()
+        return cfg
+
     async def save_r2_config(
         self,
         *,
         r2_enabled: bool = False,
-        r2_endpoint_url: str = "",
-        r2_access_key_id: str = "",
-        r2_secret_access_key: str = "",
+        r2_api_key: str = "",
+        r2_base_url: str = "",
         r2_bucket_name: str = "captchamaster",
-        r2_region: str = "auto",
     ) -> dict:
         update = {
             "r2_enabled": r2_enabled,
-            "r2_endpoint_url": r2_endpoint_url.strip(),
-            "r2_access_key_id": r2_access_key_id.strip(),
+            "r2_api_key": r2_api_key.strip(),
+            "r2_base_url": r2_base_url.strip(),
             "r2_bucket_name": r2_bucket_name.strip() or "captchamaster",
-            "r2_region": r2_region.strip() or "auto",
             "updated_at": datetime.now(timezone.utc),
         }
-        if r2_secret_access_key.strip():
-            update["r2_secret_access_key"] = r2_secret_access_key.strip()
 
         await self._get_collection().update_one(
             {"_id": SETTINGS_DOC_ID},
@@ -68,14 +67,13 @@ class SettingsService:
             upsert=True,
         )
         config = await self.get_all()
-        config.pop("r2_secret_access_key", None)
         return config
 
     async def get_r2_secret_key(self) -> str:
         doc = await self._get_doc()
         if not doc:
             return ""
-        return doc.get("r2_secret_access_key", "")
+        return doc.get("r2_api_key", "")
 
     async def is_r2_configured(self) -> bool:
         doc = await self._get_doc()
@@ -83,14 +81,5 @@ class SettingsService:
             return False
         return bool(
             doc.get("r2_enabled")
-            and doc.get("r2_endpoint_url")
-            and doc.get("r2_access_key_id")
-            and doc.get("r2_secret_access_key")
-        )
-
-    async def mark_r2_tested(self) -> None:
-        await self._get_collection().update_one(
-            {"_id": SETTINGS_DOC_ID},
-            {"$set": {"r2_last_tested_at": datetime.now(timezone.utc)}},
-            upsert=True,
+            and doc.get("r2_api_key")
         )

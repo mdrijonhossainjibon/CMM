@@ -13,7 +13,7 @@ const recentPages = [
 ];
 
 const allRoutes = [
-  '/', '/detection', '/training', '/data-upload', '/models',
+  '/', '/detection', '/training', '/dataset-upload', '/models',
   '/analytics', '/datasets', '/logs', '/settings', '/admin',
 ];
 

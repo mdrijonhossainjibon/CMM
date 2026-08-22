@@ -2,6 +2,7 @@ import os
 import shutil
 import platform
 import subprocess
+import time
 from fastapi import APIRouter, Depends
 
 from backend.core.security import get_current_user
@@ -9,6 +10,22 @@ from backend.core.config import settings
 from backend.services.user_service import UserService
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
+
+_PROCESS_START_TIME = time.time()
+
+
+def _format_uptime(seconds: float) -> str:
+    seconds = int(seconds)
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    if days > 0:
+        return f"{days}d {hours}h {minutes}m"
+    if hours > 0:
+        return f"{hours}h {minutes}m {secs}s"
+    if minutes > 0:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
 
 
 def _get_dir_size(path: str) -> int:
@@ -64,7 +81,8 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
         "total_datasets": datasets_count,
         "total_detections": 0,
         "version": settings.APP_VERSION,
-        "uptime": platform.node(),
+        "uptime": _format_uptime(time.time() - _PROCESS_START_TIME),
+        "hostname": platform.node(),
     }
 
 

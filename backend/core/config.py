@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     # Dataset
     DATASET_DIR: str = "dataset"
 
+    # Dataset ZIP storage
+    STORAGE_DIR: str = "storage"
+    BACKUPS_DIR: str = "storage/backups"
+    ZIP_TRAINING_DATA_DIR: str = "storage/training_data"
+    MAX_ZIP_SIZE_MB: int = 1024  # 1 GB
+    ALLOWED_IMAGE_EXTS: tuple = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+
     # Logs
     LOGS_DIR: str = "logs"
 
@@ -57,13 +64,12 @@ class Settings(BaseSettings):
         "custom": {"name": "Custom Model", "output_prefix": "custom"},
     }
 
-    # Cloudflare R2 Storage
-    R2_ENABLED: bool = False
-    R2_ENDPOINT_URL: str = ""
-    R2_ACCESS_KEY_ID: str = ""
-    R2_SECRET_ACCESS_KEY: str = ""
-    R2_BUCKET_NAME: str = "captchamaster"
-    R2_REGION: str = "auto"
+    # Scene Classifier
+    SCENE_DATASET_DIR: str = "datasets/scenes"
+    SCENE_MODEL_PATH: str = "backend/vision/models/scene_efficientnet.pt"
+    SCENE_CLASSES_PATH: str = "backend/vision/models/scene_classes.json"
+    SCENE_TRAIN_SCRIPT_PATH: str = "backend/vision/train_scene.py"
+    SCENE_PROGRESS_FILE_PATH: str = "runs/scene_train_progress.txt"
 
     # Security
     RATE_LIMIT_PER_MINUTE: int = 300

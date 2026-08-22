@@ -1,10 +1,14 @@
-import { useState, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import GlassPanel from '../components/common/GlassPanel';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Icon } from '../components/common/Icons';
-import { detectSingle } from '../services/detectionService';
+import { detectSingle, getModelStatus, reloadAllModels, type ModelStatusResponse } from '../services/detectionService';
+import { getTrainStatusRaw } from '../services/trainingService';
+import { usePolling } from '../hooks';
 import type { DetectionObject } from '../types';
+import toast from 'react-hot-toast';
 
 const MODEL_TYPES = [
   { value: 'auto', label: 'Auto (best.pt)' },
@@ -26,15 +30,70 @@ export default function Detection() {
   const [slots, setSlots] = useState<(ImageSlot | null)[]>(Array(GRID_SIZE).fill(null));
   const [detections, setDetections] = useState<(DetectionObject[] | null)[]>([]);
   const [activeSlot, setActiveSlot] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [detectingSlot, setDetectingSlot] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [confThreshold, setConfThreshold] = useState(0.5);
-  const [modelType, setModelType] = useState('aws');
+  const [modelType, setModelType] = useState('auto');
   const [modelInfo, setModelInfo] = useState<{ name: string; classes: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
+
+  // Model availability + live training status
+  const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
+  const [checkingModels, setCheckingModels] = useState(false);
+  const [warmLoading, setWarmLoading] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const { data: trainStatus } = usePolling(
+    () => getTrainStatusRaw().catch(() => ({ running: false })),
+    3000
+  );
+
+  const fetchModelStatus = useCallback(async () => {
+    setCheckingModels(true);
+    try {
+      const res = await getModelStatus();
+      setModelStatus(res);
+    } catch {
+      setModelStatus(null);
+    } finally {
+      setCheckingModels(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchModelStatus();
+  }, [fetchModelStatus]);
+
+  // Training complete hole: pop-up dekhay + sob model warm-load kore.
+  const prevRunningRef = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    const nowRunning = (trainStatus as { running?: boolean } | null)?.running === true;
+    const prev = prevRunningRef.current;
+
+    if (prev === true && !nowRunning) {
+      setWarmLoading(true);
+      setModelOpen(true);
+      reloadAllModels()
+        .then((res) => {
+          setModelStatus(res);
+          toast.success('Training complete — all models loaded & ready!');
+        })
+        .catch(() => {
+          toast.error('Training done, but models failed to load. Try Reload.');
+        })
+        .finally(() => {
+          setWarmLoading(false);
+          fetchModelStatus();
+        });
+    }
+
+    prevRunningRef.current = nowRunning;
+  }, [trainStatus, fetchModelStatus]);
+
+  const trainingActive = (trainStatus as { running?: boolean } | null)?.running === true;
+  const currentModel = modelStatus?.models?.[modelType];
+  const modelAvailable = modelType === 'auto' ? true : (currentModel?.available ?? true);
 
   const filledIndices = slots
     .map((s, i) => (s ? i : -1))
@@ -117,10 +176,13 @@ export default function Detection() {
 
   const handleDetectAll = async () => {
     if (filledCount === 0) return;
+    if (!modelAvailable) {
+      toast.error('This model is not available yet. Train it first.');
+      return;
+    }
 
-    setLoading(true);
-    setError('');
     setDetectingSlot(null);
+    setError('');
 
     const results: (DetectionObject[] | null)[] = new Array(GRID_SIZE).fill(null);
 
@@ -143,19 +205,46 @@ export default function Detection() {
 
     setDetections(results);
     setDetectingSlot(null);
+    // Refresh availability after inference (a missing model may have failed)
+    fetchModelStatus();
 
     const firstWithDetections = results.findIndex((r) => r && r.length > 0);
     if (firstWithDetections >= 0) {
       setActiveSlot(firstWithDetections);
     }
-
-    setLoading(false);
   };
 
   const totalDetections = detections.reduce((sum, d) => sum + (d?.length ?? 0), 0);
+  const isBusy = detectingSlot !== null || checkingModels || trainingActive;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 relative">
+      {/* Full-screen working overlay while loading/switching model or training */}
+      <AnimatePresence>
+        {isBusy && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3"
+          >
+            <LoadingSpinner size="lg" />
+            <p className="text-sm font-medium text-white">
+              {trainingActive
+                ? 'Training is running — detection temporarily paused'
+                : detectingSlot !== null
+                  ? `Detecting image ${detectingSlot + 1}...`
+                  : 'Loading model...'}
+            </p>
+            <p className="text-xs text-white/70">
+              {trainingActive
+                ? 'Wait for training to finish, then run detection again.'
+                : 'Preparing the selected model — one moment.'}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Toolbar */}
       <GlassPanel>
         <div className="flex flex-col md:flex-row md:items-center gap-4">
@@ -164,7 +253,10 @@ export default function Detection() {
               <span className="text-[10px] text-dark-text/60 uppercase tracking-wider font-medium">Model</span>
               <select
                 value={modelType}
-                onChange={(e) => setModelType(e.target.value)}
+                onChange={(e) => {
+                  setModelType(e.target.value);
+                  setModelInfo(null);
+                }}
                 className="pl-2.5 pr-7 py-2 rounded-lg bg-dark-surface border border-dark-border text-dark-heading text-xs font-medium focus:outline-none focus:border-primary appearance-none bg-no-repeat"
                 style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'right 0.25rem center', backgroundSize: '1.25rem' }}
               >
@@ -173,6 +265,15 @@ export default function Detection() {
                 ))}
               </select>
             </div>
+            {modelType !== 'auto' && !modelAvailable && (
+              <Link
+                to="/training"
+                className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-medium hover:bg-amber-500/20 transition-colors"
+              >
+                <Icon name="alertTriangle" className="w-3.5 h-3.5" />
+                Model missing — Train
+              </Link>
+            )}
           </div>
 
           <div className="flex-1 flex flex-col gap-1.5">
@@ -220,10 +321,10 @@ export default function Detection() {
             {filledCount > 0 && (
               <button
                 onClick={handleDetectAll}
-                disabled={loading}
+                disabled={detectingSlot !== null}
                 className="px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm shadow-primary/25"
               >
-                {loading ? (
+                {detectingSlot !== null ? (
                   <><LoadingSpinner size="sm" /> Detecting...</>
                 ) : (
                   <><Icon name="detection" className="w-3.5 h-3.5" /> Detect ({filledCount})</>
@@ -233,7 +334,8 @@ export default function Detection() {
             {filledCount > 0 && (
               <button
                 onClick={clearAll}
-                className="px-4 py-2.5 rounded-xl border border-dark-border text-dark-text text-xs font-medium hover:bg-dark-surface hover:border-dark-text/20 transition-all flex items-center gap-1.5"
+                disabled={detectingSlot !== null}
+                className="px-4 py-2.5 rounded-xl border border-dark-border text-dark-text text-xs font-medium hover:bg-dark-surface hover:border-dark-text/20 transition-all flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Icon name="trash" className="w-3.5 h-3.5" />
                 Clear
@@ -440,6 +542,71 @@ export default function Detection() {
           )}
         </GlassPanel>
       </div>
+
+      {/* Training complete → models open popup (blur + working) */}
+      <AnimatePresence>
+        {modelOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+            onClick={() => !warmLoading && setModelOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl bg-dark-card border border-dark-border shadow-2xl p-6"
+            >
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
+                  <Icon name="success" className="w-7 h-7 text-emerald-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-dark-heading">Training Complete</h3>
+                <p className="text-sm text-dark-text mt-1">
+                  Sob model load hoye ready hoye geche. Ekhon detection chalate parben.
+                </p>
+              </div>
+
+              <div className="mt-5 space-y-1.5">
+                {modelStatus && Object.entries(modelStatus.models).map(([type, m]) => (
+                  <div
+                    key={type}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-dark-surface border border-dark-border"
+                  >
+                    <span className="text-xs font-mono text-dark-heading uppercase">{type}</span>
+                    {m.available ? (
+                      <span className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        Ready
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-[11px] text-dark-text/50 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-dark-border" />
+                        Not trained
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setModelOpen(false)}
+                disabled={warmLoading}
+                className="mt-5 w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {warmLoading ? (
+                  <><LoadingSpinner size="sm" /> Loading models...</>
+                ) : (
+                  'Got it'
+                )}
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
